@@ -1,12 +1,9 @@
 # AGENTS.md
 
-この AGENTS.md は **template repo（sebanne-unity-vrchat-tool-template）用**のファイルです。
-新しいツール repo を作る時はこのファイルもコピーし、内容をそのツール固有のものに書き換えてください。
-
-CLAUDE.md はこの repo の雛形兼現況メモとして使用しています。
+CLAUDE.md はこの repo の現況メモとして使用しています。
 セッション開始時は CLAUDE.md を参照してコンテキストを把握してください。
 
-この repo は VRChat 向け Unity Editor ツールのテンプレートです。作業時は以下を守ってください。
+この repo は VRChat 向け Unity Editor ツール（Flipbook Material Generator）です。作業時は以下を守ってください。
 
 ## 開発ルール
 

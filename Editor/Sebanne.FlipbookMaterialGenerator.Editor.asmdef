@@ -1,7 +1,7 @@
 {
-  "name": "Sebanne.ToolTemplate.Editor",
+  "name": "Sebanne.FlipbookMaterialGenerator.Editor",
   "references": [
-    "Sebanne.ToolTemplate"
+    "Sebanne.FlipbookMaterialGenerator"
   ],
   "includePlatforms": [
     "Editor"

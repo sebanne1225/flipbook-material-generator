@@ -2,29 +2,29 @@
 
 ## ツール名
 
-- Tool Template
+- Flipbook Material Generator
 
 ## package名
 
-- `com.sebanne.tool-template`
+- `com.sebanne.flipbook-material-generator`
 
 ## 表示名
 
-- `Sebanne Tool Template`
+- `Flipbook Material Generator`
 
 ## 想定用途
 
-- VRChat 向け Unity Editor ツールの新規開発開始時に、配布しやすい package 構成を素早く用意する。
+- PNG連番からスプライトシートとフリップブックマテリアルを生成する。VRChat アバターやワールド向けのフリップブックアニメーション制作を補助する。
 
 ## 非対応
 
-- 具体的な UI 実装
-- VRChat SDK 連携実装
+- 具体的な UI 実装（未追加）
+- VRChat SDK 連携実装（未追加）
 - 自動ビルドや CI 設定
 
 ## 今後やりたいこと
 
-- サンプル EditorWindow の追加
-- Dry Run 用の共通ログ基盤の追加
-- 設定アセットや検証ユーティリティの追加
-- ドキュメント雛形の拡充
+- PNG 連番読み込みとスプライトシート合成の実装
+- フリップブックマテリアル生成の実装
+- Dry Run モードでの合成プレビュー
+- 列数・行数・出力先の設定 UI

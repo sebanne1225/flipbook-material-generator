@@ -1,9 +1,9 @@
 {
-  "name": "com.sebanne.tool-template",
-  "displayName": "Sebanne Tool Template",
+  "name": "com.sebanne.flipbook-material-generator",
+  "displayName": "Flipbook Material Generator",
   "version": "0.1.0",
   "unity": "2022.3",
-  "description": "VRChat向けUnity Editorツールのテンプレートです。",
+  "description": "An Editor tool that generates sprite sheets and flipbook materials from PNG image sequences.",
   "author": {
     "name": "sebanne"
   }

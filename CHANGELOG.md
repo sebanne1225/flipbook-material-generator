@@ -1,11 +1,8 @@
 # Changelog
 
-このファイルはこのテンプレートの変更履歴を管理します。
-
-## [0.1.0] - 2026-03-14
+## [0.1.0] - 2026-03-28
 
 ### Added
 
-- テンプレート repo の基本ディレクトリ構成を追加
-- `package.json`、asmdef、README、開発用メモを追加
-- VRChat 向け Unity Editor ツール開発の初期ルールを追加
+- テンプレートから初期立ち上げ。repo 名・package id・namespace・menu path をツール固有の識別子に置換
+- `package.json`、asmdef、README、各種メモを Flipbook Material Generator 用に更新
