@@ -4,12 +4,19 @@ using UnityEngine;
 
 namespace Sebanne.FlipbookMaterialGenerator.Editor
 {
+    internal enum OutputMode
+    {
+        SpriteSheet,
+        Texture2DArray,
+    }
+
     public sealed class FlipbookMaterialGeneratorWindow : EditorWindow
     {
         private const string WindowTitle = "Flipbook Material Generator";
 
         private DefaultAsset _inputFolder;
         private DefaultAsset _outputFolder;
+        private OutputMode _outputMode = OutputMode.SpriteSheet;
         private float _fps = 12f;
 
         [MenuItem("Tools/Sebanne/Flipbook Material Generator")]
@@ -38,6 +45,9 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             // Output folder
             _outputFolder = (DefaultAsset)EditorGUILayout.ObjectField(
                 "Output Folder", _outputFolder, typeof(DefaultAsset), false);
+
+            // Output mode
+            _outputMode = (OutputMode)EditorGUILayout.EnumPopup("Output Mode", _outputMode);
 
             // FPS
             _fps = EditorGUILayout.FloatField("FPS", _fps);
@@ -72,7 +82,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             }
         }
 
-        private void RunDryRun(string inputPath)
+        private int CountPngFiles(string inputPath)
         {
             var guids = AssetDatabase.FindAssets("t:Texture2D", new[] { inputPath });
             var count = 0;
@@ -82,6 +92,12 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 if (path.EndsWith(".png", System.StringComparison.OrdinalIgnoreCase))
                     count++;
             }
+            return count;
+        }
+
+        private void RunDryRun(string inputPath)
+        {
+            var count = CountPngFiles(inputPath);
 
             if (count == 0)
             {
@@ -89,6 +105,18 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 return;
             }
 
+            if (_outputMode == OutputMode.Texture2DArray)
+            {
+                RunDryRunArray(count);
+            }
+            else
+            {
+                RunDryRunSheet(count);
+            }
+        }
+
+        private void RunDryRunSheet(int count)
+        {
             var clamped = count > 64;
             var frameCount = clamped ? 64 : count;
             var (columns, rows) = FlipbookSheetBuilder.CalculateGrid(frameCount);
@@ -104,7 +132,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             }
 
             FlipbookGeneratorLog.Info(
-                $"[Dry Run] Frames: {count}" +
+                $"[Dry Run] Mode: SpriteSheet, Frames: {count}" +
                 (clamped ? " (clamped to 64)" : "") +
                 $", Grid: {columns}x{rows}" +
                 $", Output: {sheetWidth}x{sheetHeight}px" +
@@ -123,6 +151,27 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             }
         }
 
+        private void RunDryRunArray(int count)
+        {
+            var clamped = count > 64;
+            var frameCount = clamped ? 64 : count;
+            var frameSize = 256;
+            var estimatedBytes = (long)frameCount * frameSize * frameSize * 4;
+            var estimatedMB = estimatedBytes / (1024f * 1024f);
+
+            FlipbookGeneratorLog.Info(
+                $"[Dry Run] Mode: Texture2DArray, Frames: {count}" +
+                (clamped ? " (clamped to 64)" : "") +
+                $", Frame size: {frameSize}px" +
+                $", Estimated: ~{estimatedMB:F1}MB (RGBA32 uncompressed. Actual size may differ after compression)");
+
+            if (clamped)
+            {
+                FlipbookGeneratorLog.Warn(
+                    $"[Dry Run] {count} frames exceed the 64-frame limit. Only the first 64 will be used.");
+            }
+        }
+
         private void RunGenerate(string inputPath)
         {
             // 1. Load frames
@@ -138,14 +187,25 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             }
 
             var baseName = Path.GetFileName(inputPath);
+
+            if (_outputMode == OutputMode.Texture2DArray)
+            {
+                GenerateArray(frames, outputDir, baseName);
+            }
+            else
+            {
+                GenerateSheet(frames, outputDir, baseName);
+            }
+        }
+
+        private void GenerateSheet(Texture2D[] frames, string outputDir, string baseName)
+        {
             var sheetPath = $"{outputDir}/{baseName}_Sheet.png";
             var matPath = $"{outputDir}/{baseName}_Flipbook.mat";
 
-            // 3. Build sprite sheet
             var sheetResult = FlipbookSheetBuilder.Build(frames, sheetPath);
             if (sheetResult == null) return;
 
-            // 4. Load saved sheet texture
             var sheetTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(sheetResult.SavedPath);
             if (sheetTexture == null)
             {
@@ -153,14 +213,36 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 return;
             }
 
-            // 5. Build material
             var material = FlipbookMaterialBuilder.Build(sheetResult, sheetTexture, matPath, _fps);
             if (material == null) return;
 
             FlipbookGeneratorLog.Info(
                 $"Generation complete: {sheetResult.TotalFrames} frames -> {sheetPath}, {matPath}");
 
-            // Ping the generated material in Project window
+            EditorGUIUtility.PingObject(material);
+        }
+
+        private void GenerateArray(Texture2D[] frames, string outputDir, string baseName)
+        {
+            var arrayPath = $"{outputDir}/{baseName}_Array.asset";
+            var matPath = $"{outputDir}/{baseName}_FlipbookArray.mat";
+
+            var arrayResult = FlipbookArrayBuilder.Build(frames, arrayPath);
+            if (arrayResult == null) return;
+
+            var texArray = AssetDatabase.LoadAssetAtPath<Texture2DArray>(arrayResult.SavedPath);
+            if (texArray == null)
+            {
+                FlipbookGeneratorLog.Error($"Failed to load generated array: {arrayResult.SavedPath}");
+                return;
+            }
+
+            var material = FlipbookMaterialBuilder.BuildFromArray(arrayResult, texArray, matPath, _fps);
+            if (material == null) return;
+
+            FlipbookGeneratorLog.Info(
+                $"Generation complete: {arrayResult.TotalFrames} frames -> {arrayPath}, {matPath}");
+
             EditorGUIUtility.PingObject(material);
         }
 
