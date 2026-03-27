@@ -8,6 +8,9 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
     {
         private const string ShaderName = "Sebanne/FlipbookShader";
         private const string ArrayShaderName = "Sebanne/FlipbookArrayShader";
+        private const string LilToonShaderName = "lilToon";
+
+        internal static bool IsLilToonAvailable() => Shader.Find(LilToonShaderName) != null;
 
         internal static Material Build(
             FlipbookSheetResult sheetResult,
@@ -75,6 +78,48 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             FlipbookGeneratorLog.Info(
                 $"Material saved: {outputPath} (Texture2DArray, " +
                 $"{arrayResult.TotalFrames} frames, {fps} FPS)");
+
+            return material;
+        }
+
+        internal static Material BuildForLilToon(
+            Texture2D spriteSheet,
+            int columns,
+            int rows,
+            int totalFrames,
+            string outputPath,
+            float fps = 12f)
+        {
+            var shader = Shader.Find(LilToonShaderName);
+            if (shader == null)
+            {
+                FlipbookGeneratorLog.Error($"Shader not found: {LilToonShaderName}. Is lilToon installed?");
+                return null;
+            }
+
+            var material = new Material(shader);
+
+            // Enable Main2nd texture and configure as decal flipbook
+            material.SetFloat("_UseMain2ndTex", 1f);
+            material.SetTexture("_Main2ndTex", spriteSheet);
+            material.SetFloat("_Main2ndTexIsDecal", 1f);
+            material.SetVector("_Main2ndTexDecalAnimation",
+                new Vector4(columns, rows, totalFrames, fps));
+            material.SetVector("_Main2ndTexDecalSubParam",
+                new Vector4(1f, 1f, 0f, 0f)); // loopX, loopY, offset, (unused)
+
+            var directory = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(directory) && !AssetDatabase.IsValidFolder(directory))
+            {
+                CreateFolderRecursive(directory);
+            }
+
+            AssetDatabase.CreateAsset(material, outputPath);
+            AssetDatabase.ImportAsset(outputPath, ImportAssetOptions.ForceUpdate);
+
+            FlipbookGeneratorLog.Info(
+                $"Material saved (lilToon): {outputPath} " +
+                $"({columns}x{rows}, {totalFrames} frames, {fps} FPS)");
 
             return material;
         }

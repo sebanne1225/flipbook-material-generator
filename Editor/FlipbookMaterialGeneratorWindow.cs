@@ -8,6 +8,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
     {
         SpriteSheet,
         Texture2DArray,
+        LilToon,
     }
 
     public sealed class FlipbookMaterialGeneratorWindow : EditorWindow
@@ -18,6 +19,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
         private DefaultAsset _outputFolder;
         private OutputMode _outputMode = OutputMode.SpriteSheet;
         private float _fps = 12f;
+        private bool _generatePrefab;
 
         [MenuItem("Tools/Sebanne/Flipbook Material Generator")]
         private static void Open()
@@ -49,9 +51,19 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             // Output mode
             _outputMode = (OutputMode)EditorGUILayout.EnumPopup("Output Mode", _outputMode);
 
+            if (_outputMode == OutputMode.LilToon && !FlipbookMaterialBuilder.IsLilToonAvailable())
+            {
+                EditorGUILayout.HelpBox(
+                    "lilToon がプロジェクトに導入されていません。SpriteSheet モードを使用してください。",
+                    MessageType.Warning);
+            }
+
             // FPS
             _fps = EditorGUILayout.FloatField("FPS", _fps);
             if (_fps < 0.1f) _fps = 0.1f;
+
+            // Prefab generation
+            _generatePrefab = EditorGUILayout.Toggle("Prefab も生成する", _generatePrefab);
 
             EditorGUILayout.Space();
 
@@ -105,13 +117,17 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 return;
             }
 
-            if (_outputMode == OutputMode.Texture2DArray)
+            switch (_outputMode)
             {
-                RunDryRunArray(count);
-            }
-            else
-            {
-                RunDryRunSheet(count);
+                case OutputMode.Texture2DArray:
+                    RunDryRunArray(count);
+                    break;
+                case OutputMode.LilToon:
+                    RunDryRunLilToon(count);
+                    break;
+                default:
+                    RunDryRunSheet(count);
+                    break;
             }
         }
 
@@ -172,6 +188,48 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             }
         }
 
+        private void RunDryRunLilToon(int count)
+        {
+            if (!FlipbookMaterialBuilder.IsLilToonAvailable())
+            {
+                FlipbookGeneratorLog.Error("[Dry Run] lilToon is not installed in this project.");
+                return;
+            }
+
+            var clamped = count > 64;
+            var frameCount = clamped ? 64 : count;
+            var (columns, rows) = FlipbookSheetBuilder.CalculateGrid(frameCount);
+            var frameSize = 256;
+            var sheetWidth = columns * frameSize;
+            var sheetHeight = rows * frameSize;
+
+            if (sheetWidth > 2048 || sheetHeight > 2048)
+            {
+                frameSize = Mathf.Min(2048 / columns, 2048 / rows);
+                sheetWidth = columns * frameSize;
+                sheetHeight = rows * frameSize;
+            }
+
+            FlipbookGeneratorLog.Info(
+                $"[Dry Run] Mode: LilToon (Main2nd DecalAnimation), Frames: {count}" +
+                (clamped ? " (clamped to 64)" : "") +
+                $", Grid: {columns}x{rows}" +
+                $", Sheet: {sheetWidth}x{sheetHeight}px" +
+                $", DecalAnimation: ({columns}, {rows}, {frameCount}, {_fps})");
+
+            if (clamped)
+            {
+                FlipbookGeneratorLog.Warn(
+                    $"[Dry Run] {count} frames exceed the 64-frame limit. Only the first 64 will be used.");
+            }
+
+            if (sheetWidth > 2048 || sheetHeight > 2048)
+            {
+                FlipbookGeneratorLog.Warn(
+                    "[Dry Run] Output exceeds 2048px. Quest compatibility may be affected.");
+            }
+        }
+
         private void RunGenerate(string inputPath)
         {
             // 1. Load frames
@@ -188,13 +246,17 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
             var baseName = Path.GetFileName(inputPath);
 
-            if (_outputMode == OutputMode.Texture2DArray)
+            switch (_outputMode)
             {
-                GenerateArray(frames, outputDir, baseName);
-            }
-            else
-            {
-                GenerateSheet(frames, outputDir, baseName);
+                case OutputMode.Texture2DArray:
+                    GenerateArray(frames, outputDir, baseName);
+                    break;
+                case OutputMode.LilToon:
+                    GenerateLilToon(frames, outputDir, baseName);
+                    break;
+                default:
+                    GenerateSheet(frames, outputDir, baseName);
+                    break;
             }
         }
 
@@ -219,6 +281,9 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             FlipbookGeneratorLog.Info(
                 $"Generation complete: {sheetResult.TotalFrames} frames -> {sheetPath}, {matPath}");
 
+            if (_generatePrefab)
+                FlipbookPrefabBuilder.Build(material, outputDir, baseName);
+
             EditorGUIUtility.PingObject(material);
         }
 
@@ -242,6 +307,38 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
             FlipbookGeneratorLog.Info(
                 $"Generation complete: {arrayResult.TotalFrames} frames -> {arrayPath}, {matPath}");
+
+            if (_generatePrefab)
+                FlipbookPrefabBuilder.Build(material, outputDir, baseName);
+
+            EditorGUIUtility.PingObject(material);
+        }
+
+        private void GenerateLilToon(Texture2D[] frames, string outputDir, string baseName)
+        {
+            var sheetPath = $"{outputDir}/{baseName}_Sheet.png";
+            var matPath = $"{outputDir}/{baseName}_LilToon.mat";
+
+            var sheetResult = FlipbookSheetBuilder.Build(frames, sheetPath);
+            if (sheetResult == null) return;
+
+            var sheetTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(sheetResult.SavedPath);
+            if (sheetTexture == null)
+            {
+                FlipbookGeneratorLog.Error($"Failed to load generated sheet: {sheetResult.SavedPath}");
+                return;
+            }
+
+            var material = FlipbookMaterialBuilder.BuildForLilToon(
+                sheetTexture, sheetResult.Columns, sheetResult.Rows,
+                sheetResult.TotalFrames, matPath, _fps);
+            if (material == null) return;
+
+            FlipbookGeneratorLog.Info(
+                $"Generation complete: {sheetResult.TotalFrames} frames -> {sheetPath}, {matPath}");
+
+            if (_generatePrefab)
+                FlipbookPrefabBuilder.Build(material, outputDir, baseName);
 
             EditorGUIUtility.PingObject(material);
         }
