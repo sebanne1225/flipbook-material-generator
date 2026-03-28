@@ -41,6 +41,11 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
         private int _framesPerPage;
         private int _materialIndex;
 
+        // FPS helper
+        private int _fpsCalcFrameCount;
+        private int _fpsCalcMinutes;
+        private float _fpsCalcSeconds;
+
         [MenuItem("Tools/Sebanne/Flipbook Material Generator")]
         private static void Open()
         {
@@ -154,7 +159,37 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             // FPS
             _fps = EditorGUILayout.FloatField("PNG Sequence FPS", _fps);
             if (_fps < 0.1f) _fps = 0.1f;
-            EditorGUILayout.HelpBox("映像のFPSではなく、PNG書き出し時のFPSを入力してください", MessageType.None);
+            EditorGUILayout.HelpBox(
+                "映像のFPSではなく、PNG書き出し時のFPSを入力してください。\n" +
+                "・PNG枚数と動画秒数を入力するとFPSを自動計算できます\n" +
+                "・「Input Folderから取得」でInput Folder内のPNG枚数を自動入力できます",
+                MessageType.None);
+
+            // FPS helper
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                _fpsCalcFrameCount = EditorGUILayout.IntField("PNG 枚数", _fpsCalcFrameCount);
+                var calcInputPath = AssetPathOrNull(_inputFolder);
+                if (calcInputPath != null && AssetDatabase.IsValidFolder(calcInputPath))
+                {
+                    if (GUILayout.Button("Input Folderから取得", GUILayout.ExpandWidth(false)))
+                        _fpsCalcFrameCount = CountPngFiles(calcInputPath);
+                }
+            }
+            _fpsCalcMinutes = EditorGUILayout.IntField("動画 分", _fpsCalcMinutes);
+            _fpsCalcSeconds = EditorGUILayout.FloatField("動画 秒", _fpsCalcSeconds);
+
+            var totalDuration = _fpsCalcMinutes * 60f + _fpsCalcSeconds;
+            var calculatedFps = totalDuration > 0f ? _fpsCalcFrameCount / totalDuration : 0f;
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                EditorGUILayout.LabelField(totalDuration > 0f ? $"計算結果: {calculatedFps:F1} fps" : "計算結果: -");
+                using (new EditorGUI.DisabledScope(totalDuration <= 0f))
+                {
+                    if (GUILayout.Button("FPS に適用", GUILayout.ExpandWidth(false)))
+                        _fps = calculatedFps;
+                }
+            }
 
             // Prefab generation
             _generatePrefab = EditorGUILayout.Toggle("Prefab も生成する", _generatePrefab);
