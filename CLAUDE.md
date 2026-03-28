@@ -12,6 +12,16 @@ MA optional 対応（リフレクション方式）。
 MultiPageSequence: PNG連番を複数スプライトシートに自動分割し、
 AnimatorControllerでシームレスにループ再生する仕組みを生成。
 MA Merge Animator（FX, Relative, matchAvatarWriteDefaults）対応済み。
+最大シートサイズ選択UI（512/1024/2048/4096、デフォルト2048）実装済み。
+FlipbookPageSplitter.CalculateFramesPerPage も maxSheetSize と連動済み。
+最大シートサイズ・1ページ最大フレーム数を上級設定（折りたたみ）に移動済み。
+
+### 最大シートサイズについて
+- シートサイズを変えても総テクスチャ量はほぼ変わらない（1枚が重くなる vs 枚数が増える のトレードオフ）
+- パフォーマンスに一番効くのは FPS と 元 PNG の解像度 × フレーム数
+- シートサイズは「元 PNG に対して十分な器を確保するためにある」と理解するのが正確
+- ほとんどのユーザーは 2048 固定で困らないため、上級設定に隠している
+- ツールの最大シートサイズ（生成ピクセルサイズの上限）と Unity の Max Size（ビルド時の圧縮上限）は別物。元テクスチャが Unity の Max Size より小さければ影響なし
 
 ### PNG Sequence FPS について
 - UI の「PNG Sequence FPS」は元動画のFPSではなく、PNG書き出し時のFPSを入力する
@@ -19,7 +29,6 @@ MA Merge Animator（FX, Relative, matchAvatarWriteDefaults）対応済み。
   「枚数 ÷ 動画秒数」で実際の書き出しFPSを確認できる
 
 ### 次フェーズ候補（後回し）
-- シート上限サイズのUI選択（改善）
 - RendererPathをPrefab構造から自動生成する（改善）
 - MA Object Toggleで再生ON/OFF制御を設定する（改善）
 - テクスチャのミップストリーミングをONにする（改善）
@@ -27,6 +36,7 @@ MA Merge Animator（FX, Relative, matchAvatarWriteDefaults）対応済み。
 - SpriteSheet / Texture2DArray / LilToon モードの動作確認（素材を変えて検証）（確認）
 - FFmpeg連携による動画入力対応（将来拡張）
 - ウィンドウ内で過去生成物・フォルダ参照UI（将来拡張）
+- UI説明文・ドキュメントの整備（改善）
 
 ### Editor (namespace: Sebanne.FlipbookMaterialGenerator.Editor)
 - `Editor/FlipbookMaterialGeneratorWindow.cs` — メインウィンドウ（`Tools/Sebanne/Flipbook Material Generator`）。入力/出力フォルダ、出力先モード切り替え（元ソース直下 / ツール共通フォルダ / フォルダ指定）、FPS 設定、Prefab生成チェックボックス、Dry Run / Generate ボタン。
