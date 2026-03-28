@@ -8,6 +8,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
     {
         private const string ShaderName = "Sebanne/FlipbookShader";
         private const string ArrayShaderName = "Sebanne/FlipbookArrayShader";
+        private const string SequenceShaderName = "Sebanne/FlipbookSequenceShader";
         private const string LilToonShaderName = "lilToon";
 
         internal static bool IsLilToonAvailable() => Shader.Find(LilToonShaderName) != null;
@@ -78,6 +79,41 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             FlipbookGeneratorLog.Info(
                 $"Material saved: {outputPath} (Texture2DArray, " +
                 $"{arrayResult.TotalFrames} frames, {fps} FPS)");
+
+            return material;
+        }
+
+        internal static Material BuildForSequence(
+            FlipbookSheetResult sheetResult,
+            Texture2D sheet,
+            string outputPath)
+        {
+            var shader = Shader.Find(SequenceShaderName);
+            if (shader == null)
+            {
+                FlipbookGeneratorLog.Error($"Shader not found: {SequenceShaderName}");
+                return null;
+            }
+
+            var material = new Material(shader);
+            material.SetTexture("_MainTex", sheet);
+            material.SetInt("_Columns", sheetResult.Columns);
+            material.SetInt("_Rows", sheetResult.Rows);
+            material.SetInt("_TotalFrames", sheetResult.TotalFrames);
+            material.SetFloat("_CurrentFrame", 0f);
+
+            var directory = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(directory) && !AssetDatabase.IsValidFolder(directory))
+            {
+                CreateFolderRecursive(directory);
+            }
+
+            AssetDatabase.CreateAsset(material, outputPath);
+            AssetDatabase.ImportAsset(outputPath, ImportAssetOptions.ForceUpdate);
+
+            FlipbookGeneratorLog.Info(
+                $"Material saved (Sequence): {outputPath} ({sheetResult.Columns}x{sheetResult.Rows}, " +
+                $"{sheetResult.TotalFrames} frames)");
 
             return material;
         }

@@ -55,5 +55,46 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             FlipbookGeneratorLog.Info($"Loaded {result.Length} frame(s) from: {folderPath}");
             return result;
         }
+
+        /// <summary>
+        /// Loads all PNG frames without the 64-frame cap. For MultiPageSequence mode.
+        /// </summary>
+        internal static Texture2D[] LoadAll(string folderPath)
+        {
+            if (!AssetDatabase.IsValidFolder(folderPath))
+            {
+                FlipbookGeneratorLog.Error($"Folder not found: {folderPath}");
+                return Array.Empty<Texture2D>();
+            }
+
+            var guids = AssetDatabase.FindAssets("t:Texture2D", new[] { folderPath });
+
+            var texturePaths = guids
+                .Select(AssetDatabase.GUIDToAssetPath)
+                .Where(p => p.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+                .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+            if (texturePaths.Length == 0)
+            {
+                FlipbookGeneratorLog.Error($"No PNG files found in: {folderPath}");
+                return Array.Empty<Texture2D>();
+            }
+
+            var result = new Texture2D[texturePaths.Length];
+            for (var i = 0; i < texturePaths.Length; i++)
+            {
+                var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePaths[i]);
+                if (tex == null)
+                {
+                    FlipbookGeneratorLog.Error($"Failed to load texture: {texturePaths[i]}");
+                    return Array.Empty<Texture2D>();
+                }
+                result[i] = tex;
+            }
+
+            FlipbookGeneratorLog.Info($"Loaded {result.Length} frame(s) from: {folderPath} (no cap)");
+            return result;
+        }
     }
 }
