@@ -14,6 +14,13 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
         MultiPageSequence,
     }
 
+    internal enum OutputFolderMode
+    {
+        SourceRelative,
+        ToolDefault,
+        Custom,
+    }
+
     public sealed class FlipbookMaterialGeneratorWindow : EditorWindow
     {
         private const string WindowTitle = "Flipbook Material Generator";
@@ -21,6 +28,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
         private DefaultAsset _inputFolder;
         private DefaultAsset _outputFolder;
         private OutputMode _outputMode = OutputMode.SpriteSheet;
+        private OutputFolderMode _outputFolderMode = OutputFolderMode.ToolDefault;
         private float _fps = 12f;
         private bool _generatePrefab;
 
@@ -52,9 +60,23 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             _inputFolder = (DefaultAsset)EditorGUILayout.ObjectField(
                 "Input Folder", _inputFolder, typeof(DefaultAsset), false);
 
-            // Output folder
-            _outputFolder = (DefaultAsset)EditorGUILayout.ObjectField(
-                "Output Folder", _outputFolder, typeof(DefaultAsset), false);
+            // Output folder mode
+            var folderModeLabels = new GUIContent[]
+            {
+                new GUIContent("元ソース直下"),
+                new GUIContent("ツール共通フォルダ"),
+                new GUIContent("フォルダを指定"),
+            };
+            _outputFolderMode = (OutputFolderMode)EditorGUILayout.Popup(
+                new GUIContent("出力先"),
+                (int)_outputFolderMode,
+                folderModeLabels);
+
+            if (_outputFolderMode == OutputFolderMode.Custom)
+            {
+                _outputFolder = (DefaultAsset)EditorGUILayout.ObjectField(
+                    "Output Folder", _outputFolder, typeof(DefaultAsset), false);
+            }
 
             // Output mode
             _outputMode = (OutputMode)EditorGUILayout.EnumPopup("Output Mode", _outputMode);
@@ -308,12 +330,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             if (frames.Length == 0) return;
 
             // 2. Resolve output folder
-            var outputDir = AssetPathOrNull(_outputFolder);
-            if (string.IsNullOrEmpty(outputDir))
-            {
-                outputDir = inputPath;
-                FlipbookGeneratorLog.Info($"Output folder not specified. Using input folder: {outputDir}");
-            }
+            var outputDir = ResolveOutputDir(inputPath);
+            EnsureFolderExists(outputDir);
 
             var baseName = Path.GetFileName(inputPath);
 
@@ -428,13 +446,23 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             var splitResult = FlipbookPageSplitter.Split(allFrames, fpp);
             if (splitResult == null) return;
 
-            // 3. Per-page: SheetBuilder → MaterialBuilder
+            // 3. Create subfolders
+            var sheetsDir    = $"{outputDir}/Sheets";
+            var materialsDir = $"{outputDir}/Materials";
+            var animDir      = $"{outputDir}/Animation";
+            var prefabsDir   = $"{outputDir}/Prefabs";
+            EnsureFolderExists(sheetsDir);
+            EnsureFolderExists(materialsDir);
+            EnsureFolderExists(animDir);
+            EnsureFolderExists(prefabsDir);
+
+            // 4. Per-page: SheetBuilder → MaterialBuilder
             var materials = new Material[splitResult.PageCount];
             for (var i = 0; i < splitResult.PageCount; i++)
             {
                 var page = splitResult.Pages[i];
-                var sheetPath = $"{outputDir}/{baseName}_Page{i + 1}_Sheet.png";
-                var matPath = $"{outputDir}/{baseName}_Page{i + 1}_Seq.mat";
+                var sheetPath = $"{sheetsDir}/{baseName}_Page{i + 1}_Sheet.png";
+                var matPath   = $"{materialsDir}/{baseName}_Page{i + 1}_Seq.mat";
 
                 var sheetResult = FlipbookSheetBuilder.Build(page.Frames, sheetPath);
                 if (sheetResult == null) return;
@@ -452,20 +480,20 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 materials[i] = mat;
             }
 
-            // 4. Per-page: AnimationClip
+            // 5. Per-page: AnimationClip
             var clips = new AnimationClip[splitResult.PageCount];
             for (var i = 0; i < splitResult.PageCount; i++)
             {
                 var page = splitResult.Pages[i];
-                var clipPath = $"{outputDir}/{baseName}_Page{i + 1}_Anim.anim";
+                var clipPath = $"{animDir}/{baseName}_Page{i + 1}_Anim.anim";
                 var clip = FlipbookAnimationBuilder.Build(
                     i, page.Frames.Length, _fps, _materialIndex, clipPath);
                 if (clip == null) return;
                 clips[i] = clip;
             }
 
-            // 5. AnimatorController
-            var controllerPath = $"{outputDir}/{baseName}_Animator.controller";
+            // 6. AnimatorController
+            var controllerPath = $"{animDir}/{baseName}_Animator.controller";
             FlipbookGeneratorLog.Info($"AnimatorBuilder: clips.Length = {clips.Length}");
             AnimatorController controller;
             try
@@ -483,9 +511,9 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 $"MultiPageSequence generation complete: {splitResult.TotalFrames} frames -> " +
                 $"{splitResult.PageCount} pages, {controllerPath}");
 
-            // 6. Prefab
+            // 7. Prefab
             if (_generatePrefab)
-                FlipbookPrefabBuilder.BuildMultiPage(materials, controller, outputDir, baseName);
+                FlipbookPrefabBuilder.BuildMultiPage(materials, controller, prefabsDir, baseName);
 
             EditorGUIUtility.PingObject(controller);
         }
@@ -501,6 +529,37 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 parts[i] = $"{count}f";
             }
             return $"{pageCount} ページ ({string.Join(" + ", parts)})";
+        }
+
+        private string ResolveOutputDir(string inputPath)
+        {
+            switch (_outputFolderMode)
+            {
+                case OutputFolderMode.SourceRelative:
+                    return inputPath + "/Generated";
+                case OutputFolderMode.Custom:
+                    var custom = AssetPathOrNull(_outputFolder);
+                    if (!string.IsNullOrEmpty(custom)) return custom;
+                    FlipbookGeneratorLog.Info("Output folder not specified. Falling back to input folder.");
+                    return inputPath;
+                default: // ToolDefault
+                    return "Assets/Sebanne/FlipbookMaterialGenerator/Generated";
+            }
+        }
+
+        private static void EnsureFolderExists(string path)
+        {
+            if (AssetDatabase.IsValidFolder(path)) return;
+
+            var parts = path.Split('/');
+            var current = parts[0];
+            for (var i = 1; i < parts.Length; i++)
+            {
+                var next = current + "/" + parts[i];
+                if (!AssetDatabase.IsValidFolder(next))
+                    AssetDatabase.CreateFolder(current, parts[i]);
+                current = next;
+            }
         }
 
         private static string AssetPathOrNull(DefaultAsset asset)

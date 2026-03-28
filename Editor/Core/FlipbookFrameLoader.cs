@@ -22,7 +22,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
             var textures = guids
                 .Select(AssetDatabase.GUIDToAssetPath)
-                .Where(p => p.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+                .Where(p => p.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+                         && !p.Contains("/Generated/"))
                 .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 

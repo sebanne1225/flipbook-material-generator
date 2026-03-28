@@ -40,7 +40,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             }
 
             AssetDatabase.CreateAsset(material, outputPath);
-            AssetDatabase.ImportAsset(outputPath, ImportAssetOptions.ForceUpdate);
+            EditorUtility.SetDirty(material);
+            AssetDatabase.SaveAssets();
 
             FlipbookGeneratorLog.Info(
                 $"Material saved: {outputPath} ({sheetResult.Columns}x{sheetResult.Rows}, " +
@@ -74,7 +75,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             }
 
             AssetDatabase.CreateAsset(material, outputPath);
-            AssetDatabase.ImportAsset(outputPath, ImportAssetOptions.ForceUpdate);
+            EditorUtility.SetDirty(material);
+            AssetDatabase.SaveAssets();
 
             FlipbookGeneratorLog.Info(
                 $"Material saved: {outputPath} (Texture2DArray, " +
@@ -109,7 +111,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             }
 
             AssetDatabase.CreateAsset(material, outputPath);
-            AssetDatabase.ImportAsset(outputPath, ImportAssetOptions.ForceUpdate);
+            EditorUtility.SetDirty(material);
+            AssetDatabase.SaveAssets();
 
             FlipbookGeneratorLog.Info(
                 $"Material saved (Sequence): {outputPath} ({sheetResult.Columns}x{sheetResult.Rows}, " +
@@ -151,7 +154,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             }
 
             AssetDatabase.CreateAsset(material, outputPath);
-            AssetDatabase.ImportAsset(outputPath, ImportAssetOptions.ForceUpdate);
+            EditorUtility.SetDirty(material);
+            AssetDatabase.SaveAssets();
 
             FlipbookGeneratorLog.Info(
                 $"Material saved (lilToon): {outputPath} " +
