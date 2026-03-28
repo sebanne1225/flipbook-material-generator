@@ -25,10 +25,14 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
     {
         private const string WindowTitle = "Flipbook Material Generator";
 
+        private static readonly int[] MaxSheetSizeOptions = { 512, 1024, 2048, 4096 };
+
         private DefaultAsset _inputFolder;
         private DefaultAsset _outputFolder;
         private OutputMode _outputMode = OutputMode.SpriteSheet;
         private OutputFolderMode _outputFolderMode = OutputFolderMode.ToolDefault;
+        private int _maxSheetSize = 2048;
+        private bool _showAdvanced = false;
         private float _fps = 12f;
         private bool _generatePrefab;
 
@@ -88,27 +92,48 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                     MessageType.Warning);
             }
 
+            // Advanced settings
+            _showAdvanced = EditorGUILayout.Foldout(_showAdvanced, "上級設定");
+            if (_showAdvanced)
+            {
+                var sizeLabels = new GUIContent[]
+                {
+                    new GUIContent("512"),
+                    new GUIContent("1024"),
+                    new GUIContent("2048"),
+                    new GUIContent("4096"),
+                };
+                _maxSheetSize = EditorGUILayout.IntPopup(
+                    new GUIContent("最大シートサイズ"),
+                    _maxSheetSize,
+                    sizeLabels,
+                    MaxSheetSizeOptions);
+
+                if (_outputMode == OutputMode.MultiPageSequence)
+                {
+                    _autoSplit = EditorGUILayout.Toggle("自動分割", _autoSplit);
+                    if (_autoSplit)
+                    {
+                        var auto = FlipbookPageSplitter.CalculateFramesPerPage(_maxSheetSize);
+                        if (_framesPerPage <= 0) _framesPerPage = auto;
+                        _framesPerPage = EditorGUILayout.IntField("1ページ最大フレーム数", _framesPerPage);
+                        EditorGUILayout.HelpBox(
+                            $"フレームサイズ 256px / シート上限 {_maxSheetSize}px → 自動算出値: {auto}",
+                            MessageType.None);
+                    }
+                    else
+                    {
+                        _framesPerPage = EditorGUILayout.IntField("1ページ最大フレーム数", _framesPerPage);
+                    }
+                    if (_framesPerPage < 1) _framesPerPage = 1;
+                }
+            }
+
             // MultiPageSequence settings
             if (_outputMode == OutputMode.MultiPageSequence)
             {
                 EditorGUILayout.Space();
                 EditorGUILayout.LabelField("MultiPageSequence 設定", EditorStyles.boldLabel);
-
-                _autoSplit = EditorGUILayout.Toggle("自動分割", _autoSplit);
-                if (_autoSplit)
-                {
-                    var auto = FlipbookPageSplitter.CalculateFramesPerPage();
-                    if (_framesPerPage <= 0) _framesPerPage = auto;
-                    _framesPerPage = EditorGUILayout.IntField("1ページ最大フレーム数", _framesPerPage);
-                    EditorGUILayout.HelpBox(
-                        $"フレームサイズ 256px / シート上限 2048px → 自動算出値: {auto}",
-                        MessageType.None);
-                }
-                else
-                {
-                    _framesPerPage = EditorGUILayout.IntField("1ページ最大フレーム数", _framesPerPage);
-                }
-                if (_framesPerPage < 1) _framesPerPage = 1;
 
                 // Split preview
                 var previewPath = AssetPathOrNull(_inputFolder);
@@ -212,9 +237,9 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             var sheetWidth = columns * frameSize;
             var sheetHeight = rows * frameSize;
 
-            if (sheetWidth > 2048 || sheetHeight > 2048)
+            if (sheetWidth > _maxSheetSize || sheetHeight > _maxSheetSize)
             {
-                frameSize = Mathf.Min(2048 / columns, 2048 / rows);
+                frameSize = Mathf.Min(_maxSheetSize / columns, _maxSheetSize / rows);
                 sheetWidth = columns * frameSize;
                 sheetHeight = rows * frameSize;
             }
@@ -232,10 +257,10 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                     $"[Dry Run] {count} frames exceed the 64-frame limit. Only the first 64 will be used.");
             }
 
-            if (sheetWidth > 2048 || sheetHeight > 2048)
+            if (sheetWidth > _maxSheetSize || sheetHeight > _maxSheetSize)
             {
                 FlipbookGeneratorLog.Warn(
-                    "[Dry Run] Output exceeds 2048px. Quest compatibility may be affected.");
+                    $"[Dry Run] Output exceeds {_maxSheetSize}px. Quest compatibility may be affected.");
             }
         }
 
@@ -275,9 +300,9 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             var sheetWidth = columns * frameSize;
             var sheetHeight = rows * frameSize;
 
-            if (sheetWidth > 2048 || sheetHeight > 2048)
+            if (sheetWidth > _maxSheetSize || sheetHeight > _maxSheetSize)
             {
-                frameSize = Mathf.Min(2048 / columns, 2048 / rows);
+                frameSize = Mathf.Min(_maxSheetSize / columns, _maxSheetSize / rows);
                 sheetWidth = columns * frameSize;
                 sheetHeight = rows * frameSize;
             }
@@ -295,16 +320,16 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                     $"[Dry Run] {count} frames exceed the 64-frame limit. Only the first 64 will be used.");
             }
 
-            if (sheetWidth > 2048 || sheetHeight > 2048)
+            if (sheetWidth > _maxSheetSize || sheetHeight > _maxSheetSize)
             {
                 FlipbookGeneratorLog.Warn(
-                    "[Dry Run] Output exceeds 2048px. Quest compatibility may be affected.");
+                    $"[Dry Run] Output exceeds {_maxSheetSize}px. Quest compatibility may be affected.");
             }
         }
 
         private void RunDryRunMultiPage(int count)
         {
-            var fpp = _framesPerPage > 0 ? _framesPerPage : FlipbookPageSplitter.CalculateFramesPerPage();
+            var fpp = _framesPerPage > 0 ? _framesPerPage : FlipbookPageSplitter.CalculateFramesPerPage(_maxSheetSize);
             var pageCount = Mathf.CeilToInt((float)count / fpp);
             var preview = BuildSplitPreview(count, fpp);
 
@@ -357,7 +382,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             var sheetPath = $"{outputDir}/{baseName}_Sheet.png";
             var matPath = $"{outputDir}/{baseName}_Flipbook.mat";
 
-            var sheetResult = FlipbookSheetBuilder.Build(frames, sheetPath);
+            var sheetResult = FlipbookSheetBuilder.Build(frames, sheetPath, _maxSheetSize);
             if (sheetResult == null) return;
 
             var sheetTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(sheetResult.SavedPath);
@@ -411,7 +436,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             var sheetPath = $"{outputDir}/{baseName}_Sheet.png";
             var matPath = $"{outputDir}/{baseName}_LilToon.mat";
 
-            var sheetResult = FlipbookSheetBuilder.Build(frames, sheetPath);
+            var sheetResult = FlipbookSheetBuilder.Build(frames, sheetPath, _maxSheetSize);
             if (sheetResult == null) return;
 
             var sheetTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(sheetResult.SavedPath);
@@ -442,7 +467,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             if (allFrames.Length == 0) return;
 
             // 2. Split into pages
-            var fpp = _framesPerPage > 0 ? _framesPerPage : FlipbookPageSplitter.CalculateFramesPerPage();
+            var fpp = _framesPerPage > 0 ? _framesPerPage : FlipbookPageSplitter.CalculateFramesPerPage(_maxSheetSize);
             var splitResult = FlipbookPageSplitter.Split(allFrames, fpp);
             if (splitResult == null) return;
 
@@ -464,7 +489,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 var sheetPath = $"{sheetsDir}/{baseName}_Page{i + 1}_Sheet.png";
                 var matPath   = $"{materialsDir}/{baseName}_Page{i + 1}_Seq.mat";
 
-                var sheetResult = FlipbookSheetBuilder.Build(page.Frames, sheetPath);
+                var sheetResult = FlipbookSheetBuilder.Build(page.Frames, sheetPath, _maxSheetSize);
                 if (sheetResult == null) return;
 
                 var sheetTex = AssetDatabase.LoadAssetAtPath<Texture2D>(sheetResult.SavedPath);

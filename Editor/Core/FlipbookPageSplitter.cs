@@ -39,25 +39,21 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
     internal static class FlipbookPageSplitter
     {
         private const int DefaultFrameSize = 256;
-        private const int MaxSheetSize = 2048;
 
-        internal static int CalculateFramesPerPage(int frameSize = DefaultFrameSize)
+        internal static int CalculateFramesPerPage(int maxSheetSize, int frameSize = DefaultFrameSize)
         {
-            var maxCols = MaxSheetSize / frameSize;
-            var maxRows = MaxSheetSize / frameSize;
+            var maxCols = maxSheetSize / frameSize;
+            var maxRows = maxSheetSize / frameSize;
             return maxCols * maxRows;
         }
 
-        internal static FlipbookPageSplitResult Split(Texture2D[] allFrames, int framesPerPage = 0)
+        internal static FlipbookPageSplitResult Split(Texture2D[] allFrames, int framesPerPage)
         {
             if (allFrames == null || allFrames.Length == 0)
             {
                 FlipbookGeneratorLog.Error("No frames provided to FlipbookPageSplitter.");
                 return null;
             }
-
-            if (framesPerPage <= 0)
-                framesPerPage = CalculateFramesPerPage();
 
             var pages = new List<FlipbookPageInfo>();
             var totalFrames = allFrames.Length;

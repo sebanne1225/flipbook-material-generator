@@ -26,9 +26,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
     internal static class FlipbookSheetBuilder
     {
         private const int DefaultFrameSize = 256;
-        private const int MaxSheetSize = 2048;
 
-        internal static FlipbookSheetResult Build(Texture2D[] frames, string outputPath)
+        internal static FlipbookSheetResult Build(Texture2D[] frames, string outputPath, int maxSheetSize)
         {
             if (frames == null || frames.Length == 0)
             {
@@ -41,13 +40,13 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             var sheetWidth = columns * frameSize;
             var sheetHeight = rows * frameSize;
 
-            if (sheetWidth > MaxSheetSize || sheetHeight > MaxSheetSize)
+            if (sheetWidth > maxSheetSize || sheetHeight > maxSheetSize)
             {
-                frameSize = Math.Min(MaxSheetSize / columns, MaxSheetSize / rows);
+                frameSize = Math.Min(maxSheetSize / columns, maxSheetSize / rows);
                 sheetWidth = columns * frameSize;
                 sheetHeight = rows * frameSize;
                 FlipbookGeneratorLog.Warn(
-                    $"Frame size reduced to {frameSize}px to fit within {MaxSheetSize}x{MaxSheetSize}.");
+                    $"Frame size reduced to {frameSize}px to fit within {maxSheetSize}x{maxSheetSize}.");
             }
 
             var sheet = new Texture2D(sheetWidth, sheetHeight, TextureFormat.RGBA32, false);
