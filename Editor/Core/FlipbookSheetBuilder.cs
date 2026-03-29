@@ -82,6 +82,12 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             File.WriteAllBytes(outputPath, pngBytes);
             AssetDatabase.ImportAsset(outputPath, ImportAssetOptions.ForceUpdate);
 
+            if (AssetImporter.GetAtPath(outputPath) is TextureImporter importer)
+            {
+                importer.streamingMipmaps = true;
+                importer.SaveAndReimport();
+            }
+
             FlipbookGeneratorLog.Info(
                 $"Sprite sheet saved: {outputPath} ({columns}x{rows}, {sheetWidth}x{sheetHeight}px)");
 
