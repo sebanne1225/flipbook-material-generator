@@ -35,6 +35,9 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
         private bool _showAdvanced = false;
         private float _fps = 12f;
         private bool _generatePrefab;
+        private bool _useMergeAnimator = true;
+        private bool _addObjectToggle;
+        private string _toggleName = "Flipbook";
 
         // MultiPageSequence settings
         private bool _autoSplit = true;
@@ -193,6 +196,36 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
             // Prefab generation
             _generatePrefab = EditorGUILayout.Toggle("Prefab も生成する", _generatePrefab);
+
+            if (_generatePrefab)
+            {
+                EditorGUI.indentLevel++;
+
+                _useMergeAnimator = EditorGUILayout.Toggle("MA Merge Animator を追加", _useMergeAnimator);
+                EditorGUI.indentLevel++;
+                EditorGUILayout.LabelField("アバターにアニメーションを自動でマージします", EditorStyles.miniLabel);
+                EditorGUI.indentLevel--;
+
+                _addObjectToggle = EditorGUILayout.Toggle("MA Object Toggle を追加", _addObjectToggle);
+                EditorGUI.indentLevel++;
+                EditorGUILayout.LabelField("VRChatメニューでフリップブックのON/OFFができます", EditorStyles.miniLabel);
+                if (_addObjectToggle)
+                {
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        _toggleName = EditorGUILayout.TextField("トグル名", _toggleName);
+                        var toggleFolderPath = AssetPathOrNull(_inputFolder);
+                        if (toggleFolderPath != null && AssetDatabase.IsValidFolder(toggleFolderPath))
+                        {
+                            if (GUILayout.Button("Input Folderから取得", GUILayout.ExpandWidth(false)))
+                                _toggleName = Path.GetFileName(toggleFolderPath);
+                        }
+                    }
+                }
+                EditorGUI.indentLevel--;
+
+                EditorGUI.indentLevel--;
+            }
 
             EditorGUILayout.Space();
 
@@ -434,7 +467,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 $"Generation complete: {sheetResult.TotalFrames} frames -> {sheetPath}, {matPath}");
 
             if (_generatePrefab)
-                FlipbookPrefabBuilder.Build(material, outputDir, baseName);
+                FlipbookPrefabBuilder.Build(material, outputDir, baseName, _addObjectToggle, _toggleName, _useMergeAnimator);
 
             EditorGUIUtility.PingObject(material);
         }
@@ -461,7 +494,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 $"Generation complete: {arrayResult.TotalFrames} frames -> {arrayPath}, {matPath}");
 
             if (_generatePrefab)
-                FlipbookPrefabBuilder.Build(material, outputDir, baseName);
+                FlipbookPrefabBuilder.Build(material, outputDir, baseName, _addObjectToggle, _toggleName, _useMergeAnimator);
 
             EditorGUIUtility.PingObject(material);
         }
@@ -490,7 +523,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 $"Generation complete: {sheetResult.TotalFrames} frames -> {sheetPath}, {matPath}");
 
             if (_generatePrefab)
-                FlipbookPrefabBuilder.Build(material, outputDir, baseName);
+                FlipbookPrefabBuilder.Build(material, outputDir, baseName, _addObjectToggle, _toggleName, _useMergeAnimator);
 
             EditorGUIUtility.PingObject(material);
         }
@@ -547,7 +580,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 var page = splitResult.Pages[i];
                 var clipPath = $"{animDir}/{baseName}_Page{i + 1}_Anim.anim";
                 var clip = FlipbookAnimationBuilder.Build(
-                    i, page.Frames.Length, _fps, _materialIndex, clipPath);
+                    i, splitResult.PageCount, page.Frames.Length, _fps, _materialIndex, clipPath);
                 if (clip == null) return;
                 clips[i] = clip;
             }
@@ -573,7 +606,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
             // 7. Prefab
             if (_generatePrefab)
-                FlipbookPrefabBuilder.BuildMultiPage(materials, controller, prefabsDir, baseName);
+                FlipbookPrefabBuilder.BuildMultiPage(materials, controller, prefabsDir, baseName, _addObjectToggle, _toggleName, _useMergeAnimator);
 
             EditorGUIUtility.PingObject(controller);
         }

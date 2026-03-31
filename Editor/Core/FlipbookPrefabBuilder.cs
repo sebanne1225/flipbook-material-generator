@@ -15,6 +15,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             "nadena.dev.modular_avatar.core.ModularAvatarObjectToggle";
         private const string MAMergeAnimatorTypeName =
             "nadena.dev.modular_avatar.core.ModularAvatarMergeAnimator";
+        private const string MAMenuItemTypeName =
+            "nadena.dev.modular_avatar.core.ModularAvatarMenuItem";
 
         private static Type FindType(string fullName)
         {
@@ -23,7 +25,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 .FirstOrDefault(t => t != null);
         }
 
-        internal static void Build(Material material, string outputFolderPath, string baseName)
+        internal static void Build(Material material, string outputFolderPath, string baseName,
+            bool addObjectToggle = false, string toggleName = "Flipbook", bool useMergeAnimator = true)
         {
             var prefabName = $"{baseName}_Flipbook";
             var root = new GameObject(prefabName);
@@ -43,7 +46,10 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                     UnityEngine.Object.DestroyImmediate(collider);
 
                 // MA optional integration
-                TryAttachModularAvatar(root);
+                if (addObjectToggle)
+                    TryAttachObjectToggleAndMenuItem(root, toggleName);
+                else if (useMergeAnimator)
+                    TryAttachModularAvatar(root);
 
                 // Save prefab
                 var prefabPath = $"{outputFolderPath}/{prefabName}.prefab";
@@ -62,7 +68,10 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             Material[] materials,
             AnimatorController controller,
             string outputFolderPath,
-            string baseName)
+            string baseName,
+            bool addObjectToggle = false,
+            string toggleName = "Flipbook",
+            bool useMergeAnimator = true)
         {
             var prefabName = $"{baseName}_FlipbookMultiPage";
             var root = new GameObject(prefabName);
@@ -93,8 +102,12 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 animator.runtimeAnimatorController = controller;
 
                 // MA optional integration
-                TryAttachModularAvatar(root);
-                TryAttachMergeAnimator(root, controller);
+                if (addObjectToggle)
+                    TryAttachObjectToggleAndMenuItem(root, toggleName);
+                else if (useMergeAnimator)
+                    TryAttachModularAvatar(root);
+                if (useMergeAnimator)
+                    TryAttachMergeAnimator(root, controller);
 
                 // Save prefab
                 var prefabPath = $"{outputFolderPath}/{prefabName}.prefab";
@@ -107,6 +120,48 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             {
                 UnityEngine.Object.DestroyImmediate(root);
             }
+        }
+
+        private static void TryAttachObjectToggleAndMenuItem(GameObject root, string toggleName)
+        {
+            var objectToggleType = FindType(MAObjectToggleTypeName);
+            var menuItemType = FindType(MAMenuItemTypeName);
+
+            if (objectToggleType == null || menuItemType == null)
+            {
+                FlipbookGeneratorLog.Info("MA ObjectToggle or MenuItem type not found. Skipping Object Toggle setup.");
+                return;
+            }
+
+            root.AddComponent(objectToggleType);
+
+            var menuItemComp = root.AddComponent(menuItemType);
+
+            var flags = BindingFlags.Public | BindingFlags.Instance;
+            var controlField = menuItemType.GetField("Control", flags);
+            if (controlField != null)
+            {
+                var control = controlField.GetValue(menuItemComp);
+                var controlType = controlField.FieldType;
+
+                var nameField = controlType.GetField("name", flags);
+                nameField?.SetValue(control, toggleName);
+
+                var typeField = controlType.GetField("type", flags);
+                if (typeField != null)
+                {
+                    // VRCExpressionsMenu.Control.ControlType.Toggle = 2
+                    var toggleValue = Enum.ToObject(typeField.FieldType, 2);
+                    typeField.SetValue(control, toggleValue);
+                }
+
+                controlField.SetValue(menuItemComp, control);
+            }
+
+            // Default OFF: prefab starts inactive
+            root.SetActive(false);
+
+            FlipbookGeneratorLog.Info($"MA ObjectToggle and MenuItem attached (toggle: '{toggleName}', default: OFF).");
         }
 
         private static void TryAttachModularAvatar(GameObject root)
