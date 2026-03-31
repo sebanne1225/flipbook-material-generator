@@ -8,7 +8,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
     {
         internal static AnimatorController Build(
             AnimationClip[] clips,
-            string outputPath)
+            string outputPath,
+            PlaybackMode playbackMode = PlaybackMode.Loop)
         {
             // 1. Delete existing file to prevent stale asset reuse
             if (AssetDatabase.LoadAssetAtPath<AnimatorController>(outputPath) != null)
@@ -18,11 +19,44 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
             // 2. Create controller file (rootStateMachine is auto-registered)
             var controller = AnimatorController.CreateAnimatorControllerAtPath(outputPath);
+
+            // Rename layer
+            var layers = controller.layers;
+            layers[0].name = "Flipbook";
+            controller.layers = layers;
+
             var rootStateMachine = controller.layers[0].stateMachine;
 
-            // 3. Add states and transitions
-            // Note: AddState/AddTransition register sub-assets internally; no manual AddObjectToAsset needed
+            // 3. Parameters
+            controller.AddParameter("FlipbookToggle", AnimatorControllerParameterType.Bool);
+            if (playbackMode == PlaybackMode.ManualReset)
+                controller.AddParameter("FlipbookReset", AnimatorControllerParameterType.Bool);
+
+            // 4. Idle state (both modes): all Pages off, default state
+            var idleClip = new AnimationClip { frameRate = 1f };
+            for (var p = 0; p < clips.Length; p++)
+            {
+                var pagePath = $"Pages/Page{p + 1}";
+                var offCurve = new AnimationCurve(new Keyframe(0f, 0f));
+                idleClip.SetCurve(pagePath, typeof(GameObject), "m_IsActive", offCurve);
+            }
+            var idleSettings = AnimationUtility.GetAnimationClipSettings(idleClip);
+            idleSettings.loopTime = false;
+            AnimationUtility.SetAnimationClipSettings(idleClip, idleSettings);
+
+            var idleClipDir = System.IO.Path.GetDirectoryName(outputPath).Replace('\\', '/');
+            var idleClipPath = $"{idleClipDir}/Idle.anim";
+            AssetDatabase.CreateAsset(idleClip, idleClipPath);
+            AssetDatabase.ImportAsset(idleClipPath, ImportAssetOptions.ForceUpdate);
+
+            var idleState = rootStateMachine.AddState("Idle");
+            idleState.motion = idleClip;
+            idleState.writeDefaultValues = true;
+            rootStateMachine.defaultState = idleState;
+
+            // 5. Page states and sequential transitions
             AnimatorState previousState = null;
+            AnimatorState page1State = null;
 
             for (var i = 0; i < clips.Length; i++)
             {
@@ -31,9 +65,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 state.writeDefaultValues = true;
 
                 if (i == 0)
-                {
-                    rootStateMachine.defaultState = state;
-                }
+                    page1State = state;
 
                 if (previousState != null)
                 {
@@ -50,7 +82,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             // Loop: last page -> first page
             if (clips.Length > 1 && previousState != null)
             {
-                var loopTransition = previousState.AddTransition(rootStateMachine.defaultState);
+                var loopTransition = previousState.AddTransition(page1State);
                 loopTransition.hasExitTime = true;
                 loopTransition.exitTime = 1f;
                 loopTransition.duration = 0f;
@@ -63,6 +95,25 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 selfTransition.exitTime = 1f;
                 selfTransition.duration = 0f;
                 selfTransition.hasFixedDuration = true;
+            }
+
+            // 6. Toggle transitions (both modes)
+            // Idle → Page1: FlipbookToggle = true
+            var idleToPage1 = idleState.AddTransition(page1State);
+            idleToPage1.AddCondition(AnimatorConditionMode.If, 0, "FlipbookToggle");
+            idleToPage1.hasExitTime = false;
+            idleToPage1.duration = 0f;
+            idleToPage1.hasFixedDuration = true;
+
+            // 7. ManualReset: AnyState → Page1 on FlipbookReset = true
+            if (playbackMode == PlaybackMode.ManualReset && page1State != null)
+            {
+                var anyToPage1 = rootStateMachine.AddAnyStateTransition(page1State);
+                anyToPage1.AddCondition(AnimatorConditionMode.If, 0, "FlipbookReset");
+                anyToPage1.hasExitTime = false;
+                anyToPage1.duration = 0f;
+                anyToPage1.hasFixedDuration = true;
+                anyToPage1.canTransitionToSelf = false;
             }
 
             // 4. Persist

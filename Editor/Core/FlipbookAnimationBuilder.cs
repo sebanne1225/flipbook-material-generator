@@ -26,7 +26,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             }
 
             var curve = new AnimationCurve(keyframes);
-            var rendererPath = $"Page{pageIndex + 1}/Quad";
+            var rendererPath = $"Pages/Page{pageIndex + 1}/Quad";
             var propertyName = $"material._CurrentFrame";
             clip.SetCurve(rendererPath, typeof(MeshRenderer), propertyName, curve);
 
@@ -40,7 +40,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             for (var p = 0; p < pageCount; p++)
             {
                 if (p == pageIndex) continue;
-                clip.SetCurve($"Page{p + 1}/Quad", typeof(MeshRenderer), "m_Enabled", disabledCurve);
+                clip.SetCurve($"Pages/Page{p + 1}/Quad", typeof(MeshRenderer), "m_Enabled", disabledCurve);
             }
 
             // Set clip to non-looping (Animator handles loop transitions)
