@@ -15,6 +15,11 @@ MA Merge Animator（FX, Relative, matchAvatarWriteDefaults）対応済み。
 最大シートサイズ選択UI（512/1024/2048/4096、デフォルト2048）実装済み。
 FlipbookPageSplitter.CalculateFramesPerPage も maxSheetSize と連動済み。
 最大シートサイズ・1ページ最大フレーム数を上級設定（折りたたみ）に移動済み。
+FPS補助計算UI（分秒入力・Input Folderから自動カウント）実装済み。
+ミップストリーミング常時ON実装済み（TextureImporter.streamingMipmaps = true）。
+Prefab生成UIをMA Merge Animator / MA Object Toggleの2つに分離実装済み。
+MultiPageSequenceのAnimationClipを「自分ON・他全ページOFF」に修正済み
+（writeDefaultValues非依存。FlipbookAnimationBuilder で全Pageを明示制御）。
 
 ### 最大シートサイズについて
 - シートサイズを変えても総テクスチャ量はほぼ変わらない（1枚が重くなる vs 枚数が増える のトレードオフ）
@@ -29,10 +34,9 @@ FlipbookPageSplitter.CalculateFramesPerPage も maxSheetSize と連動済み。
   「枚数 ÷ 動画秒数」で実際の書き出しFPSを確認できる
 
 ### 次フェーズ候補（後回し）
-- RendererPathをPrefab構造から自動生成する（改善）
-- MA Object Toggleで再生ON/OFF制御を設定する（改善）
-- テクスチャのミップストリーミングをONにする（改善）
-- PNG枚数と動画秒数からFPSを自動計算する補助機能（改善）
+- MA シンプル/上級モード切り替えUI設計（改善）
+- 再生制御の選択肢（ループ / オフ時リセット / リセットボタン）（改善）
+- Object Toggleの中身埋め・メニュー生成（改善）
 - SpriteSheet / Texture2DArray / LilToon モードの動作確認（素材を変えて検証）（確認）
 - FFmpeg連携による動画入力対応（将来拡張）
 - ウィンドウ内で過去生成物・フォルダ参照UI（将来拡張）
