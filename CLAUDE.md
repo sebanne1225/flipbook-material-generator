@@ -20,6 +20,21 @@ FPS補助計算UI（分秒入力・Input Folderから自動カウント）実装
 Prefab生成UIをMA Merge Animator / MA Object Toggleの2つに分離実装済み。
 MultiPageSequenceのAnimationClipを「自分ON・他全ページOFF」に修正済み
 （writeDefaultValues非依存。FlipbookAnimationBuilder で全Pageを明示制御）。
+PlaybackMode（Loop / ManualReset）再生モード選択UI実装済み。
+AnimatorController に Idle ステート（全ページOFF）をデフォルトステートとして追加済み。
+FlipbookToggle（Bool）パラメータ制御実装済み。
+ManualReset 時は FlipbookReset（Bool）も追加。
+AnyState → Idle 遷移削除、Pages/ 表示制御は MA ObjectToggle に委譲。
+MA Menu 構造実装済み
+（MenuInstaller + SubMenu MenuItem → Toggle / Reset 子オブジェクト）。
+Toggle の MA MenuItem パラメータ名: FlipbookToggle。
+Reset の MA MenuItem パラメータ名: FlipbookReset（ManualReset 時のみ生成）。
+Pages/ 子オブジェクト構造実装済み（pagesObj.SetActive(false) でデフォルト非表示）。
+AnimatorController レイヤー名を "Flipbook" にリネーム済み。
+OnEnable で _framesPerPage 初期化（UI 空白バグ修正）済み。
+プリセット UI（おすすめ / カスタム）実装済み。MAMode は廃止。
+_enableMergeAnimator / _enableObjectToggle / _enableMenu の 3 bool で MA 連携を制御。
+enableMenu = false 時は ObjectToggle + MA Menu 構造を丸ごとスキップ。
 
 ### 最大シートサイズについて
 - シートサイズを変えても総テクスチャ量はほぼ変わらない（1枚が重くなる vs 枚数が増える のトレードオフ）
@@ -34,10 +49,17 @@ MultiPageSequenceのAnimationClipを「自分ON・他全ページOFF」に修正
   「枚数 ÷ 動画秒数」で実際の書き出しFPSを確認できる
 
 ### 次フェーズ候補（後回し）
-- MA シンプル/上級モード切り替えUI設計（改善）
-- 再生制御の選択肢（ループ / オフ時リセット / リセットボタン）（改善）
-- Object Toggleの中身埋め・メニュー生成（改善）
-- SpriteSheet / Texture2DArray / LilToon モードの動作確認（素材を変えて検証）（確認）
+- 途中から再開プリセットの追加（改善）
+  ※ keepAnimatorStateOnDisable ベース。VRChat 環境での動作未検証のため保留中。
+- OffReset モード（Object Toggle OFF で frame0 へ戻る）（改善）
+  ※ VRC 対応には bool パラメータ + Idle ステート +
+  MA パラメータドライバー連携が必要。実装コストが高いため次フェーズ
+- keepAnimatorStateOnDisable による途中再開（改善）
+  ※ MA なし・Animator 単体運用時に root をオンオフして途中から再開する方式
+  VRChat 環境での動作が未検証・不安定の可能性あり
+- Object Toggle の音源対応（改善）
+  ※ ObjectToggle の Objects リストに AudioSource も自動追加する
+- SpriteSheet / Texture2DArray / LilToon モードの動作確認（確認）
 - FFmpeg連携による動画入力対応（将来拡張）
 - ウィンドウ内で過去生成物・フォルダ参照UI（将来拡張）
 - UI説明文・ドキュメントの整備（改善）
@@ -47,10 +69,10 @@ MultiPageSequenceのAnimationClipを「自分ON・他全ページOFF」に修正
 - `Editor/Core/FlipbookFrameLoader.cs` — PNG 連番読み込み。AssetDatabase 経由、上限なし（LoadAll）。
 - `Editor/Core/FlipbookSheetBuilder.cs` — スプライトシート生成。自動グリッド計算、最大 2048x2048。FlipbookSheetResult を返す。
 - `Editor/Core/FlipbookMaterialBuilder.cs` — マテリアル生成。BuildForSequence（MultiPageSequence用）。
-- `Editor/Core/FlipbookPrefabBuilder.cs` — Prefab 生成。BuildMultiPage で複数ページ Prefab を出力。MA 検出時は MenuInstaller + MergeAnimator をアタッチ（リフレクション方式、optional）。
+- `Editor/Core/FlipbookPrefabBuilder.cs` — Prefab 生成。BuildMultiPage で複数ページ Prefab を出力。MA Menu 構造（MenuInstaller + SubMenu MenuItem + ObjectToggle + Reset）を生成、MergeAnimator をアタッチ（リフレクション方式、optional）。
 - `Editor/Core/FlipbookPageSplitter.cs` — MultiPageSequence 用。PNG連番を複数ページ（スプライトシート）に分割。
 - `Editor/Core/FlipbookAnimationBuilder.cs` — MultiPageSequence 用。各ページのAnimationClipを生成。
-- `Editor/Core/FlipbookAnimatorBuilder.cs` — MultiPageSequence 用。AnimatorControllerを生成、MA Merge Animatorをアタッチ。
+- `Editor/Core/FlipbookAnimatorBuilder.cs` — MultiPageSequence 用。AnimatorControllerを生成（Idle + Page ステート、FlipbookToggle / FlipbookReset パラメータ）。
 - `Editor/Diagnostics/FlipbookGeneratorLog.cs` — ログユーティリティ。prefix `[FlipbookMaterialGenerator]`。
 
 ### Runtime
