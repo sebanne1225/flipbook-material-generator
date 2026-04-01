@@ -48,6 +48,11 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             settings.loopTime = false;
             AnimationUtility.SetAnimationClipSettings(clip, settings);
 
+            if (AssetDatabase.LoadAssetAtPath<AnimationClip>(outputPath) != null)
+            {
+                AssetDatabase.DeleteAsset(outputPath);
+                AssetDatabase.Refresh();
+            }
             AssetDatabase.CreateAsset(clip, outputPath);
             AssetDatabase.ImportAsset(outputPath, ImportAssetOptions.ForceUpdate);
 

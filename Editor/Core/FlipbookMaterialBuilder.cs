@@ -39,6 +39,19 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 CreateFolderRecursive(directory);
             }
 
+            var existing = AssetDatabase.LoadAssetAtPath<Material>(outputPath);
+            if (existing != null)
+            {
+                existing.shader = material.shader;
+                existing.CopyPropertiesFromMaterial(material);
+                EditorUtility.SetDirty(existing);
+                AssetDatabase.SaveAssets();
+
+                FlipbookGeneratorLog.Info(
+                    $"Material updated: {outputPath} ({sheetResult.Columns}x{sheetResult.Rows}, " +
+                    $"{sheetResult.TotalFrames} frames, {fps} FPS)");
+                return existing;
+            }
             AssetDatabase.CreateAsset(material, outputPath);
             EditorUtility.SetDirty(material);
             AssetDatabase.SaveAssets();
@@ -74,6 +87,19 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 CreateFolderRecursive(directory);
             }
 
+            var existing = AssetDatabase.LoadAssetAtPath<Material>(outputPath);
+            if (existing != null)
+            {
+                existing.shader = material.shader;
+                existing.CopyPropertiesFromMaterial(material);
+                EditorUtility.SetDirty(existing);
+                AssetDatabase.SaveAssets();
+
+                FlipbookGeneratorLog.Info(
+                    $"Material updated: {outputPath} (Texture2DArray, " +
+                    $"{arrayResult.TotalFrames} frames, {fps} FPS)");
+                return existing;
+            }
             AssetDatabase.CreateAsset(material, outputPath);
             EditorUtility.SetDirty(material);
             AssetDatabase.SaveAssets();
@@ -110,6 +136,19 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 CreateFolderRecursive(directory);
             }
 
+            var existing = AssetDatabase.LoadAssetAtPath<Material>(outputPath);
+            if (existing != null)
+            {
+                existing.shader = material.shader;
+                existing.CopyPropertiesFromMaterial(material);
+                EditorUtility.SetDirty(existing);
+                AssetDatabase.SaveAssets();
+
+                FlipbookGeneratorLog.Info(
+                    $"Material updated (Sequence): {outputPath} ({sheetResult.Columns}x{sheetResult.Rows}, " +
+                    $"{sheetResult.TotalFrames} frames)");
+                return existing;
+            }
             AssetDatabase.CreateAsset(material, outputPath);
             EditorUtility.SetDirty(material);
             AssetDatabase.SaveAssets();
@@ -153,6 +192,19 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 CreateFolderRecursive(directory);
             }
 
+            var existing = AssetDatabase.LoadAssetAtPath<Material>(outputPath);
+            if (existing != null)
+            {
+                existing.shader = material.shader;
+                existing.CopyPropertiesFromMaterial(material);
+                EditorUtility.SetDirty(existing);
+                AssetDatabase.SaveAssets();
+
+                FlipbookGeneratorLog.Info(
+                    $"Material updated (lilToon): {outputPath} " +
+                    $"({columns}x{rows}, {totalFrames} frames, {fps} FPS)");
+                return existing;
+            }
             AssetDatabase.CreateAsset(material, outputPath);
             EditorUtility.SetDirty(material);
             AssetDatabase.SaveAssets();

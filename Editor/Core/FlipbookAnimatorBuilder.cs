@@ -46,6 +46,11 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
             var idleClipDir = System.IO.Path.GetDirectoryName(outputPath).Replace('\\', '/');
             var idleClipPath = $"{idleClipDir}/Idle.anim";
+            if (AssetDatabase.LoadAssetAtPath<AnimationClip>(idleClipPath) != null)
+            {
+                AssetDatabase.DeleteAsset(idleClipPath);
+                AssetDatabase.Refresh();
+            }
             AssetDatabase.CreateAsset(idleClip, idleClipPath);
             AssetDatabase.ImportAsset(idleClipPath, ImportAssetOptions.ForceUpdate);
 

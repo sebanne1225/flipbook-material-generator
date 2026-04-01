@@ -55,6 +55,11 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 CreateFolderRecursive(directory);
             }
 
+            if (AssetDatabase.LoadAssetAtPath<Texture2DArray>(outputPath) != null)
+            {
+                AssetDatabase.DeleteAsset(outputPath);
+                AssetDatabase.Refresh();
+            }
             AssetDatabase.CreateAsset(texArray, outputPath);
             AssetDatabase.ImportAsset(outputPath, ImportAssetOptions.ForceUpdate);
 

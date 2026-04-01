@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using UnityEditor;
@@ -41,18 +42,25 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 textures = textures.Take(MaxFrames).ToArray();
             }
 
-            var result = new Texture2D[textures.Length];
+            var loaded = new List<Texture2D>(textures.Length);
             for (var i = 0; i < textures.Length; i++)
             {
                 var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(textures[i]);
                 if (tex == null)
                 {
-                    FlipbookGeneratorLog.Error($"Failed to load texture: {textures[i]}");
-                    return Array.Empty<Texture2D>();
+                    FlipbookGeneratorLog.Warn($"Skipping unreadable frame: {textures[i]}");
+                    continue;
                 }
-                result[i] = tex;
+                loaded.Add(tex);
             }
 
+            if (loaded.Count == 0)
+            {
+                FlipbookGeneratorLog.Error($"No frames could be loaded from: {folderPath}");
+                return Array.Empty<Texture2D>();
+            }
+
+            var result = loaded.ToArray();
             FlipbookGeneratorLog.Info($"Loaded {result.Length} frame(s) from: {folderPath}");
             return result;
         }
@@ -82,18 +90,25 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 return Array.Empty<Texture2D>();
             }
 
-            var result = new Texture2D[texturePaths.Length];
+            var loaded = new List<Texture2D>(texturePaths.Length);
             for (var i = 0; i < texturePaths.Length; i++)
             {
                 var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(texturePaths[i]);
                 if (tex == null)
                 {
-                    FlipbookGeneratorLog.Error($"Failed to load texture: {texturePaths[i]}");
-                    return Array.Empty<Texture2D>();
+                    FlipbookGeneratorLog.Warn($"Skipping unreadable frame: {texturePaths[i]}");
+                    continue;
                 }
-                result[i] = tex;
+                loaded.Add(tex);
             }
 
+            if (loaded.Count == 0)
+            {
+                FlipbookGeneratorLog.Error($"No frames could be loaded from: {folderPath}");
+                return Array.Empty<Texture2D>();
+            }
+
+            var result = loaded.ToArray();
             FlipbookGeneratorLog.Info($"Loaded {result.Length} frame(s) from: {folderPath} (no cap)");
             return result;
         }
