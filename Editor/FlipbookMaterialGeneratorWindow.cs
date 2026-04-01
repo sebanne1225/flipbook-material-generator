@@ -49,6 +49,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
         private bool _enableMergeAnimator = true;
         private bool _enableObjectToggle = true;
         private bool _enableMenu = true;
+        private bool _enableAudioSource;
+        private AudioClip _audioClip;
 
         // MultiPageSequence settings
         private bool _autoSplit = true;
@@ -75,6 +77,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                     _enableMergeAnimator = true;
                     _enableObjectToggle = true;
                     _enableMenu = true;
+                    _enableAudioSource = false;
                     break;
                 case FlipbookPreset.Custom:
                     break;
@@ -259,8 +262,6 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
                 if (_enableObjectToggle && _enableMergeAnimator)
                 {
-                    _enableMenu = EditorGUILayout.Toggle("MA Menu", _enableMenu);
-
                     using (new EditorGUILayout.HorizontalScope())
                     {
                         _toggleName = EditorGUILayout.TextField("トグル名", _toggleName);
@@ -271,6 +272,10 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                                 _toggleName = Path.GetFileName(toggleFolderPath);
                         }
                     }
+
+                    _enableAudioSource = EditorGUILayout.Toggle("音源を追加", _enableAudioSource);
+                    if (_enableAudioSource)
+                        _audioClip = (AudioClip)EditorGUILayout.ObjectField("AudioClip", _audioClip, typeof(AudioClip), false);
                 }
 
                 if (EditorGUI.EndChangeCheck())
@@ -282,10 +287,10 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             {
                 // Non-MultiPageSequence modes: simple MA toggles
                 EditorGUI.indentLevel++;
-                _enableMergeAnimator = EditorGUILayout.Toggle("MA Merge Animator を追加", _enableMergeAnimator);
                 _enableObjectToggle = EditorGUILayout.Toggle("MA Object Toggle を追加", _enableObjectToggle);
                 if (_enableObjectToggle)
                 {
+                    _enableMenu = EditorGUILayout.Toggle("MA Menu を追加", _enableMenu);
                     using (new EditorGUILayout.HorizontalScope())
                     {
                         _toggleName = EditorGUILayout.TextField("トグル名", _toggleName);
@@ -296,6 +301,10 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                                 _toggleName = Path.GetFileName(toggleFolderPath);
                         }
                     }
+
+                    _enableAudioSource = EditorGUILayout.Toggle("音源を追加", _enableAudioSource);
+                    if (_enableAudioSource)
+                        _audioClip = (AudioClip)EditorGUILayout.ObjectField("AudioClip", _audioClip, typeof(AudioClip), false);
                 }
                 EditorGUI.indentLevel--;
             }
@@ -540,7 +549,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 $"Generation complete: {sheetResult.TotalFrames} frames -> {sheetPath}, {matPath}");
 
             if (_generatePrefab)
-                FlipbookPrefabBuilder.Build(material, outputDir, baseName, _enableObjectToggle, _toggleName, _enableMergeAnimator, _enableMenu);
+                FlipbookPrefabBuilder.Build(material, outputDir, baseName, _enableObjectToggle, _toggleName, _enableMenu, _enableAudioSource, _audioClip);
 
             EditorGUIUtility.PingObject(material);
         }
@@ -567,7 +576,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 $"Generation complete: {arrayResult.TotalFrames} frames -> {arrayPath}, {matPath}");
 
             if (_generatePrefab)
-                FlipbookPrefabBuilder.Build(material, outputDir, baseName, _enableObjectToggle, _toggleName, _enableMergeAnimator, _enableMenu);
+                FlipbookPrefabBuilder.Build(material, outputDir, baseName, _enableObjectToggle, _toggleName, _enableMenu, _enableAudioSource, _audioClip);
 
             EditorGUIUtility.PingObject(material);
         }
@@ -596,7 +605,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 $"Generation complete: {sheetResult.TotalFrames} frames -> {sheetPath}, {matPath}");
 
             if (_generatePrefab)
-                FlipbookPrefabBuilder.Build(material, outputDir, baseName, _enableObjectToggle, _toggleName, _enableMergeAnimator, _enableMenu);
+                FlipbookPrefabBuilder.Build(material, outputDir, baseName, _enableObjectToggle, _toggleName, _enableMenu, _enableAudioSource, _audioClip);
 
             EditorGUIUtility.PingObject(material);
         }
@@ -679,7 +688,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
             // 7. Prefab
             if (_generatePrefab)
-                FlipbookPrefabBuilder.BuildMultiPage(materials, controller, prefabsDir, baseName, _enableObjectToggle, _toggleName, _enableMergeAnimator, _enableMenu, _playbackMode);
+                FlipbookPrefabBuilder.BuildMultiPage(materials, controller, prefabsDir, baseName, _enableObjectToggle, _toggleName, _enableMergeAnimator, _enableMenu, _enableAudioSource, _audioClip, _playbackMode);
 
             EditorGUIUtility.PingObject(controller);
         }

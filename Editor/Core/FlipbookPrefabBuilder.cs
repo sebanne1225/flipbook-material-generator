@@ -27,7 +27,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
         internal static void Build(Material material, string outputFolderPath, string baseName,
             bool enableObjectToggle = false, string toggleName = "Flipbook",
-            bool enableMergeAnimator = true, bool enableMenu = true)
+            bool enableMenu = true,
+            bool enableAudioSource = false, AudioClip audioClip = null)
         {
             var prefabName = $"{baseName}_Flipbook";
             var root = new GameObject(prefabName);
@@ -46,11 +47,29 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 if (collider != null)
                     UnityEngine.Object.DestroyImmediate(collider);
 
+                quad.SetActive(false);
+
+                // Audio container (optional)
+                GameObject audioObj = null;
+                if (enableAudioSource && audioClip != null)
+                {
+                    audioObj = new GameObject("Audio");
+                    audioObj.transform.SetParent(root.transform, false);
+                    var source = audioObj.AddComponent<AudioSource>();
+                    source.clip = audioClip;
+                    source.playOnAwake = true;
+                    source.loop = true;
+                    audioObj.SetActive(false);
+                }
+
                 // MA optional integration
                 if (enableObjectToggle)
-                    TryAttachObjectToggleAndMenuItem(root, root, toggleName, PlaybackMode.Loop, enableMenu);
-                else if (enableMergeAnimator)
-                    TryAttachModularAvatar(root);
+                    TryAttachObjectToggleAndMenuItem(root, quad, toggleName, PlaybackMode.Loop, enableMenu, audioObj);
+
+                // Ensure child order: [MA Menu(0)] → [Audio(1)] → Quad
+                if (audioObj != null)
+                    audioObj.transform.SetSiblingIndex(1);
+                quad.transform.SetSiblingIndex(audioObj != null ? 2 : 1);
 
                 // Save prefab
                 var prefabPath = $"{outputFolderPath}/{prefabName}.prefab";
@@ -74,6 +93,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             string toggleName = "Flipbook",
             bool enableMergeAnimator = true,
             bool enableMenu = true,
+            bool enableAudioSource = false,
+            AudioClip audioClip = null,
             PlaybackMode playbackMode = PlaybackMode.Loop)
         {
             var prefabName = $"{baseName}_FlipbookMultiPage";
@@ -105,17 +126,35 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                         UnityEngine.Object.DestroyImmediate(collider);
                 }
 
+                // Audio container (optional)
+                GameObject audioObj = null;
+                if (enableAudioSource && audioClip != null)
+                {
+                    audioObj = new GameObject("Audio");
+                    audioObj.transform.SetParent(root.transform, false);
+                    var source = audioObj.AddComponent<AudioSource>();
+                    source.clip = audioClip;
+                    source.playOnAwake = true;
+                    source.loop = true;
+                    audioObj.SetActive(false);
+                }
+
                 // Animator on root
                 var animator = root.AddComponent<Animator>();
                 animator.runtimeAnimatorController = controller;
 
                 // MA optional integration
                 if (enableObjectToggle)
-                    TryAttachObjectToggleAndMenuItem(root, pagesObj, toggleName, playbackMode, enableMenu);
+                    TryAttachObjectToggleAndMenuItem(root, pagesObj, toggleName, playbackMode, enableMenu, audioObj);
                 else if (enableMergeAnimator)
                     TryAttachModularAvatar(root);
                 if (enableMergeAnimator)
                     TryAttachMergeAnimator(root, controller);
+
+                // Ensure child order: MA Menu(0) → Audio(1) → Pages(2)
+                if (audioObj != null)
+                    audioObj.transform.SetSiblingIndex(1);
+                pagesObj.transform.SetSiblingIndex(audioObj != null ? 2 : 1);
 
                 // Save prefab
                 var prefabPath = $"{outputFolderPath}/{prefabName}.prefab";
@@ -130,132 +169,162 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             }
         }
 
-        private static void TryAttachObjectToggleAndMenuItem(GameObject root, GameObject toggleTarget, string toggleName, PlaybackMode playbackMode, bool enableMenu = true)
+        private static void TryAttachObjectToggleAndMenuItem(GameObject root, GameObject toggleTarget, string toggleName, PlaybackMode playbackMode, bool enableMenu = true, GameObject audioObj = null)
         {
             var objectToggleType = FindType(MAObjectToggleTypeName);
             var menuItemType = FindType(MAMenuItemTypeName);
             var menuInstallerType = FindType(MAMenuInstallerTypeName);
 
-            if (objectToggleType == null || menuItemType == null)
+            if (objectToggleType == null)
             {
-                FlipbookGeneratorLog.Info("MA ObjectToggle or MenuItem type not found. Skipping Object Toggle setup.");
+                FlipbookGeneratorLog.Info("MA ObjectToggle type not found. Skipping Object Toggle setup.");
                 return;
             }
 
             var flags = BindingFlags.Public | BindingFlags.Instance;
 
-            if (!enableMenu)
+            // Determine which GameObject hosts the ObjectToggle component
+            GameObject toggleHost;
+
+            if (enableMenu && menuItemType != null && menuInstallerType != null)
             {
-                FlipbookGeneratorLog.Info("Menu disabled. Skipping ObjectToggle and Menu generation.");
-                return;
-            }
+                try
+                {
+                // --- MA Menu hierarchy (first child of root) ---
+                var maMenu = new GameObject("MA Menu");
+                maMenu.transform.SetParent(root.transform, false);
+                maMenu.transform.SetSiblingIndex(0);
 
-            // MA Menu — first child of root (MenuInstaller + SubMenu MenuItem)
-            var maMenu = new GameObject("MA Menu");
-            maMenu.transform.SetParent(root.transform, false);
-            maMenu.transform.SetSiblingIndex(0);
-
-            if (menuInstallerType != null)
                 maMenu.AddComponent(menuInstallerType);
 
-            var maMenuItemComp = maMenu.AddComponent(menuItemType);
-            var maControlField = menuItemType.GetField("Control", flags);
-            if (maControlField != null)
-            {
-                var control = maControlField.GetValue(maMenuItemComp);
-                if (control == null)
-                    control = Activator.CreateInstance(maControlField.FieldType);
-                var typeField = maControlField.FieldType.GetField("type", flags);
-                if (typeField != null)
-                    typeField.SetValue(control, Enum.ToObject(typeField.FieldType, 103)); // SubMenu = 103
-                maControlField.SetValue(maMenuItemComp, control);
+                var maMenuItemComp = maMenu.AddComponent(menuItemType);
+                var maControlField = menuItemType.GetField("Control", flags);
+                if (maControlField != null)
+                {
+                    var control = maControlField.GetValue(maMenuItemComp);
+                    if (control == null)
+                        control = Activator.CreateInstance(maControlField.FieldType);
+                    var typeField = maControlField.FieldType.GetField("type", flags);
+                    if (typeField != null)
+                        typeField.SetValue(control, Enum.Parse(typeField.FieldType, "SubMenu"));
+                    maControlField.SetValue(maMenuItemComp, control);
+                }
+                menuItemType.GetField("label", flags)?.SetValue(maMenuItemComp, "Flipbook");
+                var menuSourceField = menuItemType.GetField("MenuSource", flags);
+                if (menuSourceField != null)
+                    menuSourceField.SetValue(maMenuItemComp, Enum.Parse(menuSourceField.FieldType, "Children"));
+
+                // Toggle child — hosts ObjectToggle + MA MenuItem (Toggle)
+                var toggleObj = new GameObject("Toggle");
+                toggleObj.transform.SetParent(maMenu.transform, false);
+                toggleHost = toggleObj;
+
+                // MA MenuItem (Toggle)
+                var menuItemComp = toggleObj.AddComponent(menuItemType);
+                var controlField = menuItemType.GetField("Control", flags);
+                if (controlField != null)
+                {
+                    var control = controlField.GetValue(menuItemComp);
+                    if (control == null)
+                        control = Activator.CreateInstance(controlField.FieldType);
+                    var typeField = controlField.FieldType.GetField("type", flags);
+                    if (typeField != null)
+                        typeField.SetValue(control, Enum.Parse(typeField.FieldType, "Toggle"));
+                    var valueField = controlField.FieldType.GetField("value", flags);
+                    valueField?.SetValue(control, 1f);
+                    var paramField = controlField.FieldType.GetField("parameter", flags);
+                    if (paramField != null)
+                    {
+                        var paramInst = Activator.CreateInstance(paramField.FieldType);
+                        paramField.FieldType.GetField("name", flags)?.SetValue(paramInst, "FlipbookToggle");
+                        paramField.SetValue(control, paramInst);
+                    }
+                    controlField.SetValue(menuItemComp, control);
+                }
+                menuItemType.GetField("label", flags)?.SetValue(menuItemComp, toggleName);
+                menuItemType.GetField("isDefault", flags)?.SetValue(menuItemComp, false); // default OFF
+
+                // ManualReset: Reset child with Button MenuItem
+                if (playbackMode == PlaybackMode.ManualReset)
+                {
+                    var resetObj = new GameObject("Reset");
+                    resetObj.transform.SetParent(maMenu.transform, false);
+                    var resetMenuItemComp = resetObj.AddComponent(menuItemType);
+                    var resetControlField = menuItemType.GetField("Control", flags);
+                    if (resetControlField != null)
+                    {
+                        var control = resetControlField.GetValue(resetMenuItemComp);
+                        if (control == null)
+                            control = Activator.CreateInstance(resetControlField.FieldType);
+                        var typeField = resetControlField.FieldType.GetField("type", flags);
+                        if (typeField != null)
+                            typeField.SetValue(control, Enum.Parse(typeField.FieldType, "Button"));
+                        var valueField = resetControlField.FieldType.GetField("value", flags);
+                        valueField?.SetValue(control, 1f);
+                        var paramField = resetControlField.FieldType.GetField("parameter", flags);
+                        if (paramField != null)
+                        {
+                            var paramInst = Activator.CreateInstance(paramField.FieldType);
+                            paramField.FieldType.GetField("name", flags)?.SetValue(paramInst, "FlipbookReset");
+                            paramField.SetValue(control, paramInst);
+                        }
+                        resetControlField.SetValue(resetMenuItemComp, control);
+                    }
+                    menuItemType.GetField("label", flags)?.SetValue(resetMenuItemComp, "Reset");
+                }
+                }
+                catch (ArgumentException e)
+                {
+                    FlipbookGeneratorLog.Error(
+                        $"MA または VRC SDK のバージョンが対応していない可能性があります: {e.Message}");
+                    return;
+                }
             }
-            menuItemType.GetField("label", flags)?.SetValue(maMenuItemComp, "Flipbook");
-            var menuSourceField = menuItemType.GetField("MenuSource", flags);
-            if (menuSourceField != null)
-                menuSourceField.SetValue(maMenuItemComp, Enum.ToObject(menuSourceField.FieldType, 1)); // SubmenuSource.Children = 1
+            else
+            {
+                // No menu — attach ObjectToggle directly to root
+                toggleHost = root;
+            }
 
-            // Toggle child — MA ObjectToggle + MA MenuItem (Toggle)
-            var toggleObj = new GameObject("Toggle");
-            toggleObj.transform.SetParent(maMenu.transform, false);
-
-            // ObjectToggle component — Objects list: toggleTarget → Active=true
-            var toggleComp = toggleObj.AddComponent(objectToggleType);
+            // --- ObjectToggle (always created on toggleHost) ---
+            var toggleComp = toggleHost.AddComponent(objectToggleType);
             var objectsProp = objectToggleType.GetProperty("Objects", flags);
             var objects = objectsProp?.GetValue(toggleComp);
             if (objects != null)
             {
                 var listType = objects.GetType();
                 var elemType = listType.GetGenericArguments()[0]; // ToggledObject
-                var toggledObj = Activator.CreateInstance(elemType);
-
                 var objRefType = FindType("nadena.dev.modular_avatar.core.AvatarObjectReference");
+                var nonPublicFlags = BindingFlags.NonPublic | BindingFlags.Instance;
+
+                var toggledObj = Activator.CreateInstance(elemType);
                 if (objRefType != null)
                 {
                     var objRefInst = Activator.CreateInstance(objRefType);
-                    objRefType.GetField("referencePath", flags)?.SetValue(objRefInst, "Pages");
-                    var nonPublicFlags = BindingFlags.NonPublic | BindingFlags.Instance;
+                    objRefType.GetField("referencePath", flags)?.SetValue(objRefInst, toggleTarget.name);
                     objRefType.GetField("targetObject", nonPublicFlags)?.SetValue(objRefInst, toggleTarget);
                     elemType.GetField("Object", flags)?.SetValue(toggledObj, objRefInst);
                 }
                 elemType.GetField("Active", flags)?.SetValue(toggledObj, true);
                 listType.GetMethod("Add")?.Invoke(objects, new[] { toggledObj });
-            }
 
-            var menuItemComp = toggleObj.AddComponent(menuItemType);
-            var controlField = menuItemType.GetField("Control", flags);
-            if (controlField != null)
-            {
-                var control = controlField.GetValue(menuItemComp);
-                if (control == null)
-                    control = Activator.CreateInstance(controlField.FieldType);
-                var typeField = controlField.FieldType.GetField("type", flags);
-                if (typeField != null)
-                    typeField.SetValue(control, Enum.ToObject(typeField.FieldType, 102)); // Toggle = 102
-                var valueField = controlField.FieldType.GetField("value", flags);
-                valueField?.SetValue(control, 1f);
-                var paramField = controlField.FieldType.GetField("parameter", flags);
-                if (paramField != null)
+                // Audio object → Active=true (optional)
+                if (audioObj != null && objRefType != null)
                 {
-                    var paramInst = Activator.CreateInstance(paramField.FieldType);
-                    paramField.FieldType.GetField("name", flags)?.SetValue(paramInst, "FlipbookToggle");
-                    paramField.SetValue(control, paramInst);
+                    var audioToggled = Activator.CreateInstance(elemType);
+                    var audioRef = Activator.CreateInstance(objRefType);
+                    objRefType.GetField("referencePath", flags)?.SetValue(audioRef, audioObj.name);
+                    objRefType.GetField("targetObject", nonPublicFlags)?.SetValue(audioRef, audioObj);
+                    elemType.GetField("Object", flags)?.SetValue(audioToggled, audioRef);
+                    elemType.GetField("Active", flags)?.SetValue(audioToggled, true);
+                    listType.GetMethod("Add")?.Invoke(objects, new[] { audioToggled });
                 }
-                controlField.SetValue(menuItemComp, control);
-            }
-            menuItemType.GetField("label", flags)?.SetValue(menuItemComp, toggleName);
-            menuItemType.GetField("isDefault", flags)?.SetValue(menuItemComp, false); // default OFF
-
-            // ManualReset: Reset child with Button MenuItem
-            if (playbackMode == PlaybackMode.ManualReset)
-            {
-                var resetObj = new GameObject("Reset");
-                resetObj.transform.SetParent(maMenu.transform, false);
-                var resetMenuItemComp = resetObj.AddComponent(menuItemType);
-                var resetControlField = menuItemType.GetField("Control", flags);
-                if (resetControlField != null)
-                {
-                    var control = resetControlField.GetValue(resetMenuItemComp);
-                    if (control == null)
-                        control = Activator.CreateInstance(resetControlField.FieldType);
-                    var typeField = resetControlField.FieldType.GetField("type", flags);
-                    if (typeField != null)
-                        typeField.SetValue(control, Enum.ToObject(typeField.FieldType, 101)); // Button = 101
-                    var valueField = resetControlField.FieldType.GetField("value", flags);
-                    valueField?.SetValue(control, 1f);
-                    var paramField = resetControlField.FieldType.GetField("parameter", flags);
-                    if (paramField != null)
-                    {
-                        var paramInst = Activator.CreateInstance(paramField.FieldType);
-                        paramField.FieldType.GetField("name", flags)?.SetValue(paramInst, "FlipbookReset");
-                        paramField.SetValue(control, paramInst);
-                    }
-                    resetControlField.SetValue(resetMenuItemComp, control);
-                }
-                menuItemType.GetField("label", flags)?.SetValue(resetMenuItemComp, "Reset");
             }
 
-            FlipbookGeneratorLog.Info($"MA Menu + ObjectToggle attached (toggle: '{toggleName}', default: OFF).");
+            if (enableMenu)
+                FlipbookGeneratorLog.Info($"MA Menu + ObjectToggle attached (toggle: '{toggleName}', default: OFF).");
+            else
+                FlipbookGeneratorLog.Info($"MA ObjectToggle attached (target: '{toggleTarget.name}').");
         }
 
         private static void TryAttachModularAvatar(GameObject root)
@@ -294,22 +363,23 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 animatorField.SetValue(component, controller);
             }
 
-            // layerType field — enum value for FX
-            var layerTypeField = mergeAnimatorType.GetField("layerType", flags);
-            if (layerTypeField != null)
+            try
             {
-                // VRCAvatarDescriptor.AnimLayerType.FX = 5
-                var fxValue = Enum.ToObject(layerTypeField.FieldType, 5);
-                layerTypeField.SetValue(component, fxValue);
-            }
+                // layerType field — enum value for FX
+                var layerTypeField = mergeAnimatorType.GetField("layerType", flags);
+                if (layerTypeField != null)
+                    layerTypeField.SetValue(component, Enum.Parse(layerTypeField.FieldType, "FX"));
 
-            // pathMode field — Relative
-            var pathModeField = mergeAnimatorType.GetField("pathMode", flags);
-            if (pathModeField != null)
+                // pathMode field — Relative
+                var pathModeField = mergeAnimatorType.GetField("pathMode", flags);
+                if (pathModeField != null)
+                    pathModeField.SetValue(component, Enum.Parse(pathModeField.FieldType, "Relative"));
+            }
+            catch (ArgumentException e)
             {
-                // MergeAnimatorPathMode.Relative = 0
-                var relativeValue = Enum.ToObject(pathModeField.FieldType, 0);
-                pathModeField.SetValue(component, relativeValue);
+                FlipbookGeneratorLog.Error(
+                    $"MA または VRC SDK のバージョンが対応していない可能性があります: {e.Message}");
+                return;
             }
 
             // deleteAttachedAnimator field — Prefab上のAnimatorを削除させる
