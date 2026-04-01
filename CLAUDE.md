@@ -56,6 +56,14 @@ AssetDatabase 上書きパターン修正済み（全 Builder）：
 - AnimatorController: DeleteAsset → CreateAnimatorControllerAtPath（既存対応済み）
 MA マジックナンバー → Enum.Parse + try-catch 対応済み。
 FrameLoader: 読み込み失敗フレームのスキップ続行対応済み（Warn ログ）。
+FlipbookConstants.cs でパス文字列・オブジェクト名・Animatorパラメータ名を定数化済み。
+FFmpeg 動画入力モード実装済み（InputMode: VideoFile / PngSequence）。
+VideoFile がデフォルト。Assets 内 ObjectField で動画選択、ffprobe で参考情報表示。
+FlipbookVideoConverter.cs: FFmpeg 検出・ffprobe 情報取得・PNG 抽出→Texture2D[] 変換。
+スロット方式フォルダ構成実装済み（Generated_Flipbook/{番号}_{出力名}/）。
+出力名テキストフィールド（入力ソースから自動設定）＋スロットドロップダウン（自動新規/既存選択）。
+Material Index 廃止済み（UI・フィールド・AnimationBuilder パラメータ完全削除）。
+CountPngFiles / LoadAll の Generated_Flipbook 除外フィルタ修正済み。
 
 ### 最大シートサイズについて
 - シートサイズを変えても総テクスチャ量はほぼ変わらない（1枚が重くなる vs 枚数が増える のトレードオフ）
@@ -78,19 +86,20 @@ FrameLoader: 読み込み失敗フレームのスキップ続行対応済み（W
 - keepAnimatorStateOnDisable による途中再開（改善）
   ※ MA なし・Animator 単体運用時に root をオンオフして途中から再開する方式
   VRChat 環境での動作が未検証・不安定の可能性あり
-- AudioSource 音源リセット注意 HelpBox（UI調整フェーズ）
-  ※ 音源はトグルOFF時に再生位置がリセットされるため映像とズレる可能性あり
-- AudioClip 未指定時の警告表示（UI調整フェーズ）
-  ※ 「音源を追加」ON でクリップ未指定の場合に HelpBox or Dry Run ログで通知
+- 動画から音源直抽出（FFmpeg AudioClip 抽出）
+- Dry Run / Generate 結果ダイアログ（ShowModalUtility）
+- 再生モードチェックボックス化（OffReset 実装時）
+- MA Merge Animator OFF 時の他コンポーネント挙動整理
+- UI 説明文整備（AudioClip 未指定警告・音源リセット HelpBox 含む）
+- 出力名プレビュー表示（生成先パスの補助テキスト）
+- スロットブラウザ UI（Generated_Flipbook 走査で一覧表示）
 - lilToon プロパティ名ハードコード（バージョンアップ時に手動確認の運用）
-- パス暗黙依存の定数化（AnimationBuilder "Pages/Page{N}/Quad"）
-- FFmpeg連携による動画入力対応（将来拡張）
-- ウィンドウ内で過去生成物・フォルダ参照UI（将来拡張）
-- UI説明文・ドキュメントの整備（改善）
 
 ### Editor (namespace: Sebanne.FlipbookMaterialGenerator.Editor)
-- `Editor/FlipbookMaterialGeneratorWindow.cs` — メインウィンドウ（`Tools/Sebanne/Flipbook Material Generator`）。入力/出力フォルダ、出力先モード切り替え（元ソース直下 / ツール共通フォルダ / フォルダ指定）、FPS 設定、Prefab生成チェックボックス、Dry Run / Generate ボタン。
-- `Editor/Core/FlipbookFrameLoader.cs` — PNG 連番読み込み。AssetDatabase 経由、上限なし（LoadAll）。読み込み失敗フレームはスキップ続行（Warn ログ）。
+- `Editor/FlipbookMaterialGeneratorWindow.cs` — メインウィンドウ（`Tools/Sebanne/Flipbook Material Generator`）。入力モード切り替え（動画ファイル / PNG連番フォルダ）、出力先モード、スロット方式出力管理、FPS 設定、Prefab生成、Dry Run / Generate ボタン。
+- `Editor/Core/FlipbookConstants.cs` — パス文字列・オブジェクト名・Animatorパラメータ名・シェーダープロパティ名の定数定義。
+- `Editor/Core/FlipbookVideoConverter.cs` — FFmpeg 動画入力。IsFFmpegAvailable / Probe(ffprobe) / ExtractFrames(PNG抽出→Texture2D[])。
+- `Editor/Core/FlipbookFrameLoader.cs` — PNG 連番読み込み。AssetDatabase 経由、上限なし（LoadAll）。読み込み失敗フレームはスキップ続行（Warn ログ）。Generated_Flipbook 除外フィルタ付き。
 - `Editor/Core/FlipbookSheetBuilder.cs` — スプライトシート生成。自動グリッド計算、最大 2048x2048。FlipbookSheetResult を返す。
 - `Editor/Core/FlipbookMaterialBuilder.cs` — マテリアル生成。Build / BuildFromArray / BuildForSequence / BuildForLilToon の 4 メソッド。既存マテリアルは CopyPropertiesFromMaterial で GUID 保持更新。
 - `Editor/Core/FlipbookPrefabBuilder.cs` — Prefab 生成。Build（3モード用）と BuildMultiPage（MultiPageSequence用）。MA Menu 構造（MenuInstaller + SubMenu MenuItem + ObjectToggle + Reset）を生成、MergeAnimator をアタッチ（リフレクション方式、optional、MultiPageSequence のみ）。
