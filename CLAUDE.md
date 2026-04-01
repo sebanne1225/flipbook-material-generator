@@ -1,6 +1,6 @@
 ## Goal
 
-PNG連番からスプライトシートとフリップブックマテリアルを生成する Unity Editor ツール。
+動画ファイルまたはPNG連番からスプライトシートとフリップブックマテリアルを生成する Unity Editor ツール。
 
 ## Current State
 
@@ -64,6 +64,20 @@ FlipbookVideoConverter.cs: FFmpeg 検出・ffprobe 情報取得・PNG 抽出→T
 出力名テキストフィールド（入力ソースから自動設定）＋スロットドロップダウン（自動新規/既存選択）。
 Material Index 廃止済み（UI・フィールド・AnimationBuilder パラメータ完全削除）。
 CountPngFiles / LoadAll の Generated_Flipbook 除外フィルタ修正済み。
+FFmpeg 音声抽出（ExtractAudio）実装済み。VideoFile モード時に「動画から音声を抽出」ボタンで WAV 抽出→AudioClip 自動セット。
+スロットブラウザ UI 実装済み（Foldout「生成済みスロット一覧」+ 概要表示 + Ping + 選択）。
+MergeAnimator OFF 時に _enableObjectToggle / _enableMenu を false リセット + 警告 HelpBox 追加済み。
+同一スロットでのモード変更時、Generate 前に旧生成物を全削除する処理（ClearSlotContents）追加済み。
+domain reload 対応済み（SerializeField 26件付与、_videoInfo は re-probe で復元）。
+LilToon 修正済み（_Cull=0 両面描画 + シェーダーキーワード _COLORADDSUBDIFF_ON / _SUNDISK_NONE）。
+
+### LilToon 固有知見
+- lilToon マテリアルを Quad に使う場合: `_Cull` を 0（Off / 両面描画）に設定する
+  → Unity の Quad は法線が +Z 方向でカメラに背を向けるため、Cull Back だと表面が描画されない
+  → 自前シェーダーは Cull Off が入っているので影響なし
+- lilToon の Main2nd DecalAnimation に必要なシェーダーキーワード:
+  `_COLORADDSUBDIFF_ON`（LIL_FEATURE_MAIN2ND）+ `_SUNDISK_NONE`（LIL_FEATURE_ANIMATE_DECAL）
+  → material.EnableKeyword() で設定する。SetFloat だけではキーワードが有効にならない
 
 ### 最大シートサイズについて
 - シートサイズを変えても総テクスチャ量はほぼ変わらない（1枚が重くなる vs 枚数が増える のトレードオフ）
@@ -86,19 +100,21 @@ CountPngFiles / LoadAll の Generated_Flipbook 除外フィルタ修正済み。
 - keepAnimatorStateOnDisable による途中再開（改善）
   ※ MA なし・Animator 単体運用時に root をオンオフして途中から再開する方式
   VRChat 環境での動作が未検証・不安定の可能性あり
-- 動画から音源直抽出（FFmpeg AudioClip 抽出）
 - Dry Run / Generate 結果ダイアログ（ShowModalUtility）
 - 再生モードチェックボックス化（OffReset 実装時）
-- MA Merge Animator OFF 時の他コンポーネント挙動整理
 - UI 説明文整備（AudioClip 未指定警告・音源リセット HelpBox 含む）
-- 出力名プレビュー表示（生成先パスの補助テキスト）
-- スロットブラウザ UI（Generated_Flipbook 走査で一覧表示）
 - lilToon プロパティ名ハードコード（バージョンアップ時に手動確認の運用）
+- プリセット UI を3モードにも実装する（UI改善）
+- おすすめプリセットの設定値を詰める（UI改善）
+- Generate 直後に Prefab を Ping（結果ダイアログと合わせて検討）
+- モードの処遇整理（SpriteSheet 除外の検討含む）
+- 動画トリミング機能（もしくはマルチ以外は上限秒数制限で映像品質維持）
+- Video モード + SpriteSheet/Texture2DArray のフレーム上限整理（メモリスパイク対策）
 
 ### Editor (namespace: Sebanne.FlipbookMaterialGenerator.Editor)
 - `Editor/FlipbookMaterialGeneratorWindow.cs` — メインウィンドウ（`Tools/Sebanne/Flipbook Material Generator`）。入力モード切り替え（動画ファイル / PNG連番フォルダ）、出力先モード、スロット方式出力管理、FPS 設定、Prefab生成、Dry Run / Generate ボタン。
 - `Editor/Core/FlipbookConstants.cs` — パス文字列・オブジェクト名・Animatorパラメータ名・シェーダープロパティ名の定数定義。
-- `Editor/Core/FlipbookVideoConverter.cs` — FFmpeg 動画入力。IsFFmpegAvailable / Probe(ffprobe) / ExtractFrames(PNG抽出→Texture2D[])。
+- `Editor/Core/FlipbookVideoConverter.cs` — FFmpeg 動画入力。IsFFmpegAvailable / Probe(ffprobe、音声トラック検出含む) / ExtractFrames(PNG抽出→Texture2D[]) / ExtractAudio(WAV抽出→AudioClip)。
 - `Editor/Core/FlipbookFrameLoader.cs` — PNG 連番読み込み。AssetDatabase 経由、上限なし（LoadAll）。読み込み失敗フレームはスキップ続行（Warn ログ）。Generated_Flipbook 除外フィルタ付き。
 - `Editor/Core/FlipbookSheetBuilder.cs` — スプライトシート生成。自動グリッド計算、最大 2048x2048。FlipbookSheetResult を返す。
 - `Editor/Core/FlipbookMaterialBuilder.cs` — マテリアル生成。Build / BuildFromArray / BuildForSequence / BuildForLilToon の 4 メソッド。既存マテリアルは CopyPropertiesFromMaterial で GUID 保持更新。
