@@ -41,46 +41,60 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
         private static readonly int[] MaxSheetSizeOptions = { 512, 1024, 2048, 4096 };
 
-        private InputMode _inputMode = InputMode.VideoFile;
-        private DefaultAsset _inputFolder;
-        private UnityEngine.Object _videoFile;
-        private FlipbookVideoConverter.VideoInfo _videoInfo;
-        private int _extractMaxResolution = 512;
-        private bool _ffmpegAvailable;
-        private bool _ffmpegChecked;
+        [SerializeField] private InputMode _inputMode = InputMode.VideoFile;
+        [SerializeField] private DefaultAsset _inputFolder;
+        [SerializeField] private UnityEngine.Object _videoFile;
+        private FlipbookVideoConverter.VideoInfo _videoInfo; // non-serializable, restored via re-probe
+        [SerializeField] private int _extractMaxResolution = 512;
+        private bool _ffmpegAvailable;  // re-checked on window open
+        private bool _ffmpegChecked;    // intentionally reset on domain reload
 
-        private DefaultAsset _outputFolder;
-        private OutputMode _outputMode = OutputMode.SpriteSheet;
-        private OutputFolderMode _outputFolderMode = OutputFolderMode.ToolDefault;
-        private int _maxSheetSize = 2048;
-        private bool _showAdvanced = false;
-        private float _fps = 8f;
-        private bool _generatePrefab;
-        private string _toggleName = "Flipbook";
-        private PlaybackMode _playbackMode = PlaybackMode.Loop;
+        [SerializeField] private DefaultAsset _outputFolder;
+        [SerializeField] private OutputMode _outputMode = OutputMode.SpriteSheet;
+        [SerializeField] private OutputFolderMode _outputFolderMode = OutputFolderMode.ToolDefault;
+        [SerializeField] private int _maxSheetSize = 2048;
+        [SerializeField] private bool _showAdvanced = false;
+        [SerializeField] private float _fps = 8f;
+        [SerializeField] private bool _generatePrefab;
+        [SerializeField] private string _toggleName = "Flipbook";
+        [SerializeField] private PlaybackMode _playbackMode = PlaybackMode.Loop;
 
         private enum FlipbookPreset { Recommended, Custom }
-        private FlipbookPreset _preset = FlipbookPreset.Recommended;
-        private bool _enableMergeAnimator = true;
-        private bool _enableObjectToggle = true;
-        private bool _enableMenu = true;
-        private bool _enableAudioSource;
-        private AudioClip _audioClip;
+        [SerializeField] private FlipbookPreset _preset = FlipbookPreset.Recommended;
+        [SerializeField] private bool _enableMergeAnimator = true;
+        [SerializeField] private bool _enableObjectToggle = true;
+        [SerializeField] private bool _enableMenu = true;
+        [SerializeField] private bool _enableAudioSource;
+        [SerializeField] private AudioClip _audioClip;
 
         // MultiPageSequence settings
-        private bool _autoSplit = true;
-        private int _framesPerPage;
+        [SerializeField] private bool _autoSplit = true;
+        [SerializeField] private int _framesPerPage;
 
         // Slot system
-        private string _outputName = "";
-        private int _slotIndex; // 0 = auto (new), 1+ = existing slot
-        private string[] _slotList = Array.Empty<string>(); // display names for popup
-        private string[] _slotFolderNames = Array.Empty<string>(); // actual folder names
+        [SerializeField] private string _outputName = "";
+        [SerializeField] private int _slotIndex; // 0 = auto (new), 1+ = existing slot
+        private string[] _slotList = Array.Empty<string>(); // rebuilt by RefreshSlotList
+        private string[] _slotFolderNames = Array.Empty<string>(); // rebuilt by RefreshSlotList
+
+        // Slot browser
+        [SerializeField] private bool _showSlotBrowser;
+        private SlotSummary[] _slotSummaries = Array.Empty<SlotSummary>(); // non-serializable, rebuilt on demand
+
+        private sealed class SlotSummary
+        {
+            internal string FolderName;
+            internal string AssetPath;
+            internal int SheetCount;
+            internal int MaterialCount;
+            internal bool HasPrefab;
+            internal bool HasAudio;
+        }
 
         // FPS helper
-        private int _fpsCalcFrameCount;
-        private int _fpsCalcMinutes;
-        private float _fpsCalcSeconds;
+        [SerializeField] private int _fpsCalcFrameCount;
+        [SerializeField] private int _fpsCalcMinutes;
+        [SerializeField] private float _fpsCalcSeconds;
 
         private void OnEnable()
         {
@@ -161,6 +175,14 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                                 _outputName = Path.GetFileNameWithoutExtension(vpath);
                         }
                     }
+                }
+
+                // Re-probe if videoInfo was lost (e.g. window reopen, domain reload)
+                if (_videoFile != null && _videoInfo == null)
+                {
+                    var vpath = AssetDatabase.GetAssetPath(_videoFile);
+                    if (FlipbookVideoConverter.IsVideoFile(vpath))
+                        _videoInfo = FlipbookVideoConverter.Probe(Path.GetFullPath(vpath));
                 }
 
                 if (_videoFile != null && !FlipbookVideoConverter.IsVideoFile(AssetDatabase.GetAssetPath(_videoFile)))
@@ -410,6 +432,16 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
                 _enableMergeAnimator = EditorGUILayout.Toggle("MA Merge Animator", _enableMergeAnimator);
 
+                if (!_enableMergeAnimator)
+                {
+                    _enableObjectToggle = false;
+                    _enableMenu = false;
+                    EditorGUILayout.HelpBox(
+                        "MA Merge Animator が OFF の場合、AnimatorController はアバターの FX レイヤーに統合されません。\n" +
+                        "VRChat アバターで使う場合は ON にしてください。",
+                        MessageType.Warning);
+                }
+
                 if (_enableMergeAnimator)
                     _enableObjectToggle = EditorGUILayout.Toggle("MA Object Toggle", _enableObjectToggle);
 
@@ -428,7 +460,10 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
                     _enableAudioSource = EditorGUILayout.Toggle("音源を追加", _enableAudioSource);
                     if (_enableAudioSource)
+                    {
                         _audioClip = (AudioClip)EditorGUILayout.ObjectField("AudioClip", _audioClip, typeof(AudioClip), false);
+                        DrawExtractAudioButton();
+                    }
                 }
 
                 if (EditorGUI.EndChangeCheck())
@@ -457,7 +492,10 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
                     _enableAudioSource = EditorGUILayout.Toggle("音源を追加", _enableAudioSource);
                     if (_enableAudioSource)
+                    {
                         _audioClip = (AudioClip)EditorGUILayout.ObjectField("AudioClip", _audioClip, typeof(AudioClip), false);
+                        DrawExtractAudioButton();
+                    }
                 }
                 EditorGUI.indentLevel--;
             }
@@ -518,6 +556,63 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                     EditorGUILayout.HelpBox(
                         "Input Folder に PNG 連番が入った Assets/ 以下のフォルダを指定してください。",
                         MessageType.Warning);
+                }
+            }
+
+            // Slot browser
+            EditorGUILayout.Space();
+            EditorGUI.BeginChangeCheck();
+            _showSlotBrowser = EditorGUILayout.Foldout(_showSlotBrowser, "生成済みスロット一覧");
+            if (EditorGUI.EndChangeCheck() && _showSlotBrowser)
+                RefreshSlotBrowser();
+
+            if (_showSlotBrowser)
+            {
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    GUILayout.FlexibleSpace();
+                    if (GUILayout.Button("更新", GUILayout.Width(40)))
+                        RefreshSlotBrowser();
+                }
+
+                if (_slotSummaries.Length == 0)
+                {
+                    EditorGUILayout.LabelField("生成済みスロットはありません", EditorStyles.centeredGreyMiniLabel);
+                }
+                else
+                {
+                    foreach (var slot in _slotSummaries)
+                    {
+                        using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
+                        {
+                            EditorGUILayout.LabelField(slot.FolderName, EditorStyles.boldLabel, GUILayout.MinWidth(120));
+
+                            var summary = $"Sheets:{slot.SheetCount}  Mat:{slot.MaterialCount}  " +
+                                          $"Prefab:{(slot.HasPrefab ? "\u25cb" : "\u00d7")}  " +
+                                          $"Audio:{(slot.HasAudio ? "\u25cb" : "\u00d7")}";
+                            EditorGUILayout.LabelField(summary, EditorStyles.miniLabel, GUILayout.MinWidth(200));
+
+                            if (GUILayout.Button("Ping", GUILayout.Width(40)))
+                            {
+                                var folderAsset = AssetDatabase.LoadAssetAtPath<DefaultAsset>(slot.AssetPath);
+                                if (folderAsset != null)
+                                    EditorGUIUtility.PingObject(folderAsset);
+                            }
+
+                            if (GUILayout.Button("選択", GUILayout.Width(40)))
+                            {
+                                RefreshSlotList();
+                                for (var i = 0; i < _slotFolderNames.Length; i++)
+                                {
+                                    if (_slotFolderNames[i] == slot.FolderName)
+                                    {
+                                        _slotIndex = i + 1;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -690,6 +785,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
             var outputDir = ResolveSlotDir(inputPath);
             EnsureFolderExists(outputDir);
+            if (_slotIndex > 0)
+                ClearSlotContents(outputDir);
             var baseName = _outputName;
 
             switch (_outputMode)
@@ -925,6 +1022,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             {
                 var outputDir = ResolveSlotDirForVideo(assetPath);
                 EnsureFolderExists(outputDir);
+                if (_slotIndex > 0)
+                    ClearSlotContents(outputDir);
                 var baseName = _outputName;
 
                 switch (_outputMode)
@@ -1067,6 +1166,61 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             if (_slotIndex >= _slotList.Length) _slotIndex = 0;
         }
 
+        private void RefreshSlotBrowser()
+        {
+            var root = ResolveGeneratedRoot(
+                _inputMode == InputMode.VideoFile && _videoFile != null
+                    ? AssetDatabase.GetAssetPath(_videoFile) ?? ""
+                    : AssetPathOrNull(_inputFolder) ?? "");
+
+            if (!AssetDatabase.IsValidFolder(root))
+            {
+                _slotSummaries = Array.Empty<SlotSummary>();
+                return;
+            }
+
+            var summaries = new System.Collections.Generic.List<SlotSummary>();
+            foreach (var sub in AssetDatabase.GetSubFolders(root))
+            {
+                var folderName = Path.GetFileName(sub);
+                if (!SlotPattern.IsMatch(folderName)) continue;
+
+                var sheets = AssetDatabase.FindAssets("t:Texture2D", new[] { sub }).Length;
+                var materials = AssetDatabase.FindAssets("t:Material", new[] { sub }).Length;
+                var hasPrefab = AssetDatabase.FindAssets("t:GameObject", new[] { sub }).Length > 0;
+                var hasAudio = AssetDatabase.FindAssets("t:AudioClip", new[] { sub }).Length > 0;
+
+                summaries.Add(new SlotSummary
+                {
+                    FolderName = folderName,
+                    AssetPath = sub,
+                    SheetCount = sheets,
+                    MaterialCount = materials,
+                    HasPrefab = hasPrefab,
+                    HasAudio = hasAudio,
+                });
+            }
+
+            _slotSummaries = summaries.ToArray();
+        }
+
+        private static void ClearSlotContents(string slotDir)
+        {
+            // Delete subfolders first
+            foreach (var sub in AssetDatabase.GetSubFolders(slotDir))
+                AssetDatabase.DeleteAsset(sub);
+
+            // Delete remaining files directly under slot folder
+            var guids = AssetDatabase.FindAssets("", new[] { slotDir });
+            foreach (var guid in guids)
+            {
+                var path = AssetDatabase.GUIDToAssetPath(guid);
+                var parent = Path.GetDirectoryName(path)?.Replace('\\', '/');
+                if (parent == slotDir)
+                    AssetDatabase.DeleteAsset(path);
+            }
+        }
+
         private static void EnsureFolderExists(string path)
         {
             if (AssetDatabase.IsValidFolder(path)) return;
@@ -1079,6 +1233,57 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 if (!AssetDatabase.IsValidFolder(next))
                     AssetDatabase.CreateFolder(current, parts[i]);
                 current = next;
+            }
+        }
+
+        private void DrawExtractAudioButton()
+        {
+            if (_inputMode != InputMode.VideoFile || _videoFile == null || !_ffmpegAvailable)
+                return;
+
+            var videoAssetPath = AssetDatabase.GetAssetPath(_videoFile);
+            if (!FlipbookVideoConverter.IsVideoFile(videoAssetPath))
+                return;
+
+            if (_videoInfo != null && !_videoInfo.HasAudioTrack)
+            {
+                EditorGUILayout.HelpBox("この動画に音声トラックはありません。", MessageType.Info);
+                return;
+            }
+
+            if (GUILayout.Button("動画から音声を抽出", GUILayout.ExpandWidth(false)))
+            {
+                var videoFullPath = Path.GetFullPath(videoAssetPath);
+
+                // Resolve slot and create Audio subfolder
+                var slotDir = _inputMode == InputMode.VideoFile
+                    ? ResolveSlotDirForVideo(videoAssetPath)
+                    : ResolveSlotDir(AssetPathOrNull(_inputFolder) ?? "");
+                EnsureFolderExists(slotDir);
+                var audioDir = $"{slotDir}/Audio";
+                EnsureFolderExists(audioDir);
+
+                var clip = FlipbookVideoConverter.ExtractAudio(videoFullPath, audioDir, _outputName);
+                if (clip != null)
+                {
+                    _audioClip = clip;
+
+                    // Switch slot dropdown to the created slot
+                    RefreshSlotList();
+                    var slotFolderName = Path.GetFileName(slotDir);
+                    for (var i = 0; i < _slotFolderNames.Length; i++)
+                    {
+                        if (_slotFolderNames[i] == slotFolderName)
+                        {
+                            _slotIndex = i + 1; // 0 = auto, 1+ = existing
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    FlipbookGeneratorLog.Warn("音声の抽出に失敗しました。動画に音声トラックがない可能性があります。");
+                }
             }
         }
 

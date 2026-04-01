@@ -19,6 +19,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             internal int Width;
             internal int Height;
             internal float Duration;
+            internal bool HasAudioTrack;
         }
 
         internal static bool IsVideoFile(string assetPath)
@@ -71,7 +72,9 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                     proc.StandardError.ReadToEnd();
                     proc.WaitForExit(10000);
                     if (proc.ExitCode != 0) return null;
-                    return ParseProbeOutput(output);
+                    var info = ParseProbeOutput(output);
+                    info.HasAudioTrack = CheckAudioTrack(fullPath);
+                    return info;
                 }
             }
             catch (Exception e)
@@ -155,6 +158,84 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 EditorUtility.ClearProgressBar();
                 try { Directory.Delete(tempDir, true); }
                 catch { /* cleanup best-effort */ }
+            }
+        }
+
+        internal static AudioClip ExtractAudio(string videoFullPath, string outputAssetDir, string baseName)
+        {
+            var wavFileName = $"{baseName}_audio.wav";
+            var wavAssetPath = $"{outputAssetDir}/{wavFileName}";
+            var wavFullPath = Path.GetFullPath(wavAssetPath);
+
+            // Ensure output directory exists on disk
+            var dirFullPath = Path.GetDirectoryName(wavFullPath);
+            if (!string.IsNullOrEmpty(dirFullPath) && !Directory.Exists(dirFullPath))
+                Directory.CreateDirectory(dirFullPath);
+
+            try
+            {
+                EditorUtility.DisplayProgressBar("Flipbook Material Generator", "音声を抽出中...", 0.5f);
+
+                var psi = new ProcessStartInfo("ffmpeg",
+                    $"-y -i \"{videoFullPath}\" -vn -acodec pcm_s16le \"{wavFullPath}\"")
+                {
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = false,
+                    RedirectStandardError = true,
+                };
+
+                using (var proc = Process.Start(psi))
+                {
+                    var stderr = proc.StandardError.ReadToEnd();
+                    proc.WaitForExit(60000);
+                    if (proc.ExitCode != 0)
+                    {
+                        FlipbookGeneratorLog.Error($"FFmpeg audio extraction failed (exit {proc.ExitCode}): {stderr}");
+                        return null;
+                    }
+                }
+
+                AssetDatabase.ImportAsset(wavAssetPath, ImportAssetOptions.ForceUpdate);
+                var clip = AssetDatabase.LoadAssetAtPath<AudioClip>(wavAssetPath);
+                if (clip == null)
+                {
+                    FlipbookGeneratorLog.Error($"Failed to load extracted audio: {wavAssetPath}");
+                    return null;
+                }
+
+                FlipbookGeneratorLog.Info($"Audio extracted: {wavAssetPath}");
+                return clip;
+            }
+            finally
+            {
+                EditorUtility.ClearProgressBar();
+            }
+        }
+
+        private static bool CheckAudioTrack(string fullPath)
+        {
+            try
+            {
+                var psi = new ProcessStartInfo("ffprobe",
+                    $"-v error -select_streams a:0 -show_entries stream=codec_type -of csv=p=0 \"{fullPath}\"")
+                {
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                };
+                using (var proc = Process.Start(psi))
+                {
+                    var output = proc.StandardOutput.ReadToEnd().Trim();
+                    proc.StandardError.ReadToEnd();
+                    proc.WaitForExit(5000);
+                    return proc.ExitCode == 0 && !string.IsNullOrEmpty(output);
+                }
+            }
+            catch
+            {
+                return false;
             }
         }
 

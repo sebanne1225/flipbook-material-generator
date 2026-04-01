@@ -177,6 +177,13 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
             var material = new Material(shader);
 
+            // Enable shader keywords required for Main2nd decal animation
+            material.EnableKeyword("_COLORADDSUBDIFF_ON");  // LIL_FEATURE_MAIN2ND
+            material.EnableKeyword("_SUNDISK_NONE");        // LIL_FEATURE_ANIMATE_DECAL
+
+            // Cull Off for Quad (default normal faces away from camera)
+            material.SetFloat("_Cull", 0f);
+
             // Enable Main2nd texture and configure as decal flipbook
             material.SetFloat("_UseMain2ndTex", 1f);
             material.SetTexture("_Main2ndTex", spriteSheet);
