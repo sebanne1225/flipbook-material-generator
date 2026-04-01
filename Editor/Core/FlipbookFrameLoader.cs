@@ -24,7 +24,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             var textures = guids
                 .Select(AssetDatabase.GUIDToAssetPath)
                 .Where(p => p.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
-                         && !p.Contains("/Generated/"))
+                         && !p.Contains("/Generated_Flipbook/"))
                 .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
@@ -80,7 +80,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
             var texturePaths = guids
                 .Select(AssetDatabase.GUIDToAssetPath)
-                .Where(p => p.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+                .Where(p => p.EndsWith(".png", StringComparison.OrdinalIgnoreCase)
+                         && !p.Contains("/Generated_Flipbook/"))
                 .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 

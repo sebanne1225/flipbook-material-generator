@@ -10,7 +10,6 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             int pageCount,
             int frameCount,
             float fps,
-            int materialIndex,
             string outputPath)
         {
             var clip = new AnimationClip { frameRate = fps };
