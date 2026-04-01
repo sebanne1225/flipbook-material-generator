@@ -28,17 +28,17 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             var rootStateMachine = controller.layers[0].stateMachine;
 
             // 3. Parameters
-            controller.AddParameter("FlipbookToggle", AnimatorControllerParameterType.Bool);
+            controller.AddParameter(FlipbookConstants.ToggleParameterName, AnimatorControllerParameterType.Bool);
             if (playbackMode == PlaybackMode.ManualReset)
-                controller.AddParameter("FlipbookReset", AnimatorControllerParameterType.Bool);
+                controller.AddParameter(FlipbookConstants.ResetParameterName, AnimatorControllerParameterType.Bool);
 
             // 4. Idle state (both modes): all Pages off, default state
             var idleClip = new AnimationClip { frameRate = 1f };
             for (var p = 0; p < clips.Length; p++)
             {
-                var pagePath = $"Pages/Page{p + 1}";
+                var pagePath = FlipbookConstants.PagePath(p);
                 var offCurve = new AnimationCurve(new Keyframe(0f, 0f));
-                idleClip.SetCurve(pagePath, typeof(GameObject), "m_IsActive", offCurve);
+                idleClip.SetCurve(pagePath, typeof(GameObject), FlipbookConstants.GameObjectActiveProperty, offCurve);
             }
             var idleSettings = AnimationUtility.GetAnimationClipSettings(idleClip);
             idleSettings.loopTime = false;
@@ -105,7 +105,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             // 6. Toggle transitions (both modes)
             // Idle → Page1: FlipbookToggle = true
             var idleToPage1 = idleState.AddTransition(page1State);
-            idleToPage1.AddCondition(AnimatorConditionMode.If, 0, "FlipbookToggle");
+            idleToPage1.AddCondition(AnimatorConditionMode.If, 0, FlipbookConstants.ToggleParameterName);
             idleToPage1.hasExitTime = false;
             idleToPage1.duration = 0f;
             idleToPage1.hasFixedDuration = true;
@@ -114,7 +114,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             if (playbackMode == PlaybackMode.ManualReset && page1State != null)
             {
                 var anyToPage1 = rootStateMachine.AddAnyStateTransition(page1State);
-                anyToPage1.AddCondition(AnimatorConditionMode.If, 0, "FlipbookReset");
+                anyToPage1.AddCondition(AnimatorConditionMode.If, 0, FlipbookConstants.ResetParameterName);
                 anyToPage1.hasExitTime = false;
                 anyToPage1.duration = 0f;
                 anyToPage1.hasFixedDuration = true;

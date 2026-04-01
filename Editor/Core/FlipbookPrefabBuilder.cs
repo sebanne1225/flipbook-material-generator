@@ -37,7 +37,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             {
                 // Child Quad with material
                 var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                quad.name = "Quad";
+                quad.name = FlipbookConstants.QuadObjectName;
                 quad.transform.SetParent(root.transform, false);
                 var renderer = quad.GetComponent<MeshRenderer>();
                 renderer.sharedMaterial = material;
@@ -53,7 +53,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 GameObject audioObj = null;
                 if (enableAudioSource && audioClip != null)
                 {
-                    audioObj = new GameObject("Audio");
+                    audioObj = new GameObject(FlipbookConstants.AudioObjectName);
                     audioObj.transform.SetParent(root.transform, false);
                     var source = audioObj.AddComponent<AudioSource>();
                     source.clip = audioClip;
@@ -103,18 +103,18 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             try
             {
                 // Pages container
-                var pagesObj = new GameObject("Pages");
+                var pagesObj = new GameObject(FlipbookConstants.PagesObjectName);
                 pagesObj.transform.SetParent(root.transform, false);
                 pagesObj.SetActive(false);
 
                 // Per-page child: Quad + Material
                 for (var i = 0; i < materials.Length; i++)
                 {
-                    var pageObj = new GameObject($"Page{i + 1}");
+                    var pageObj = new GameObject(FlipbookConstants.PageObjectName(i));
                     pageObj.transform.SetParent(pagesObj.transform, false);
 
                     var quad = GameObject.CreatePrimitive(PrimitiveType.Quad);
-                    quad.name = "Quad";
+                    quad.name = FlipbookConstants.QuadObjectName;
                     quad.transform.SetParent(pageObj.transform, false);
 
                     var renderer = quad.GetComponent<MeshRenderer>();
@@ -130,7 +130,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 GameObject audioObj = null;
                 if (enableAudioSource && audioClip != null)
                 {
-                    audioObj = new GameObject("Audio");
+                    audioObj = new GameObject(FlipbookConstants.AudioObjectName);
                     audioObj.transform.SetParent(root.transform, false);
                     var source = audioObj.AddComponent<AudioSource>();
                     source.clip = audioClip;
@@ -236,7 +236,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                     if (paramField != null)
                     {
                         var paramInst = Activator.CreateInstance(paramField.FieldType);
-                        paramField.FieldType.GetField("name", flags)?.SetValue(paramInst, "FlipbookToggle");
+                        paramField.FieldType.GetField("name", flags)?.SetValue(paramInst, FlipbookConstants.ToggleParameterName);
                         paramField.SetValue(control, paramInst);
                     }
                     controlField.SetValue(menuItemComp, control);
@@ -265,7 +265,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                         if (paramField != null)
                         {
                             var paramInst = Activator.CreateInstance(paramField.FieldType);
-                            paramField.FieldType.GetField("name", flags)?.SetValue(paramInst, "FlipbookReset");
+                            paramField.FieldType.GetField("name", flags)?.SetValue(paramInst, FlipbookConstants.ResetParameterName);
                             paramField.SetValue(control, paramInst);
                         }
                         resetControlField.SetValue(resetMenuItemComp, control);

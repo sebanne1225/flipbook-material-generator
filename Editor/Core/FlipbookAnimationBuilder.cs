@@ -26,21 +26,20 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             }
 
             var curve = new AnimationCurve(keyframes);
-            var rendererPath = $"Pages/Page{pageIndex + 1}/Quad";
-            var propertyName = $"material._CurrentFrame";
-            clip.SetCurve(rendererPath, typeof(MeshRenderer), propertyName, curve);
+            var rendererPath = FlipbookConstants.PageQuadPath(pageIndex);
+            clip.SetCurve(rendererPath, typeof(MeshRenderer), FlipbookConstants.MaterialCurrentFrameProperty, curve);
 
             // Enable this page's Quad
             var clipDuration = frameCount / fps;
             var enabledCurve = AnimationCurve.Constant(0f, clipDuration, 1f);
-            clip.SetCurve(rendererPath, typeof(MeshRenderer), "m_Enabled", enabledCurve);
+            clip.SetCurve(rendererPath, typeof(MeshRenderer), FlipbookConstants.RendererEnabledProperty, enabledCurve);
 
             // Explicitly disable all other pages' Quads
             var disabledCurve = AnimationCurve.Constant(0f, clipDuration, 0f);
             for (var p = 0; p < pageCount; p++)
             {
                 if (p == pageIndex) continue;
-                clip.SetCurve($"Pages/Page{p + 1}/Quad", typeof(MeshRenderer), "m_Enabled", disabledCurve);
+                clip.SetCurve(FlipbookConstants.PageQuadPath(p), typeof(MeshRenderer), FlipbookConstants.RendererEnabledProperty, disabledCurve);
             }
 
             // Set clip to non-looping (Animator handles loop transitions)

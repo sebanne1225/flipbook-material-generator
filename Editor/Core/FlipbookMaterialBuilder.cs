@@ -128,7 +128,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             material.SetInt("_Columns", sheetResult.Columns);
             material.SetInt("_Rows", sheetResult.Rows);
             material.SetInt("_TotalFrames", sheetResult.TotalFrames);
-            material.SetFloat("_CurrentFrame", 0f);
+            material.SetFloat(FlipbookConstants.ShaderCurrentFrame, 0f);
 
             var directory = Path.GetDirectoryName(outputPath);
             if (!string.IsNullOrEmpty(directory) && !AssetDatabase.IsValidFolder(directory))
