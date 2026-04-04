@@ -4,128 +4,132 @@
 
 ## Current State
 
-MultiPageSequence モード実装済み・動作確認済み。
-出力先モード（元ソース直下 / ツール共通フォルダ / フォルダ指定）実装済み。
-MultiPageSequence のみサブフォルダ構成（Sheets/ Materials/ Animation/ Prefabs/）に整理。
-Prefab生成対応済み（FlipbookPrefabBuilder）。
-MA optional 対応（リフレクション方式）。
-MultiPageSequence: PNG連番を複数スプライトシートに自動分割し、
-AnimatorControllerでシームレスにループ再生する仕組みを生成。
-MA Merge Animator（FX, Relative, matchAvatarWriteDefaults）対応済み。
-最大シートサイズ選択UI（512/1024/2048/4096、デフォルト2048）実装済み。
-FlipbookPageSplitter.CalculateFramesPerPage も maxSheetSize と連動済み。
-最大シートサイズ・1ページ最大フレーム数を上級設定（折りたたみ）に移動済み。
-FPS補助計算UI（分秒入力・Input Folderから自動カウント）実装済み。
-ミップストリーミング常時ON実装済み（TextureImporter.streamingMipmaps = true）。
-MultiPageSequenceのAnimationClipを「自分ON・他全ページOFF」に修正済み
-（writeDefaultValues非依存。FlipbookAnimationBuilder で全Pageを明示制御）。
-PlaybackMode（Loop / ManualReset）再生モード選択UI実装済み。
-AnimatorController に Idle ステート（全ページOFF）をデフォルトステートとして追加済み。
-FlipbookToggle（Bool）パラメータ制御実装済み。
-ManualReset 時は FlipbookReset（Bool）も追加。
-AnyState → Idle 遷移削除、Pages/ 表示制御は MA ObjectToggle に委譲。
-MA Menu 構造実装済み
-（MenuInstaller + SubMenu MenuItem → Toggle / Reset 子オブジェクト）。
-Toggle の MA MenuItem パラメータ名: FlipbookToggle。
-Reset の MA MenuItem パラメータ名: FlipbookReset（ManualReset 時のみ生成）。
-Pages/ 子オブジェクト構造実装済み（pagesObj.SetActive(false) でデフォルト非表示）。
-AnimatorController レイヤー名を "Flipbook" にリネーム済み。
-OnEnable で _framesPerPage 初期化（UI 空白バグ修正）済み。
-プリセット UI（おすすめ / カスタム）実装済み。MAMode は廃止。
-MultiPageSequence: _enableMergeAnimator / _enableObjectToggle / _enableMenu の 3 bool で MA 連携を制御。
-3モード（SpriteSheet / Texture2DArray / LilToon）: _enableObjectToggle / _enableMenu の 2 bool で制御（_enableMergeAnimator は非表示・不使用）。
-enableMenu = false 時は MA Menu を生成せず ObjectToggle を root に直接アタッチ。
+3モード（Texture2DArray / LilToon / MultiPageSequence）× 2入力モード（VideoFile / PngSequence）が動作する状態。SpriteSheet モードは除外済み。
 
-AudioSource 対応実装済み（MultiPageSequence + 3モード）。
-_enableAudioSource チェックボックス + _audioClip ObjectField。
-Audio/ 子オブジェクト（playOnAwake=true, loop=true, SetActive(false)）。
-ObjectToggle の Objects リストに自動追加。
-子オブジェクト並び順: MA Menu(0) → Audio(1) → Quad/Pages(2)。
+### 入力
+- VideoFile モード: Assets 内動画ファイルを ObjectField で選択、ffprobe で参考情報表示、FFmpeg で PNG 抽出・音声抽出・トリミング対応（-ss/-t）
+- FFmpeg PNG 抽出キャッシュ: %TEMP%/FlipbookFrames/{hash}/ にキャッシュ。動画パス+FPS+トリム+解像度+最終更新日時の MD5 ハッシュ。一致すれば抽出スキップ
+- 音声抽出キャッシュ: audio_cache_key.txt でキャッシュキー照合（動画パス+トリム設定+最終更新日時）。一致すれば FFmpeg スキップ
+- PngSequence モード: PNG 連番フォルダ指定
 
-3モード（SpriteSheet / Texture2DArray / LilToon）Prefab 生成の修正済み：
-- ObjectToggle の toggleTarget を Quad に修正（旧: root）
-- referencePath を toggleTarget.name で動的設定（旧: "Pages" ハードコード）
-- enableMenu=false 時の ObjectToggle スキップバグ修正
-- _enableMergeAnimator UI 非表示・Build() からパラメータ削除
-- Quad の初期非アクティブ（SetActive(false)）追加
-- マテリアル上書き: CopyPropertiesFromMaterial で GUID 保持
+### 出力管理
+- スロット方式フォルダ構成（Generated_Flipbook/{番号}_{出力名}/）
+- 出力先3モード（SourceRelative / ToolDefault / Custom）
+- スロットブラウザ UI（概要表示・フォルダを開く・名前クリックで選択・削除機能付き）
+- 同一スロットのモード変更時に旧生成物を全削除（Audio/ フォルダは保護）
+- Texture2DArray / LilToon モードはフレーム上限ガードあり（maxSheetSize から逆算、超過時 Generate ブロック）
 
-AssetDatabase 上書きパターン修正済み（全 Builder）：
-- Material: CopyPropertiesFromMaterial でインプレース更新
-- Texture2DArray / AnimationClip: DeleteAsset → Refresh() → CreateAsset
-- AnimatorController: DeleteAsset → CreateAnimatorControllerAtPath（既存対応済み）
-MA マジックナンバー → Enum.Parse + try-catch 対応済み。
-FrameLoader: 読み込み失敗フレームのスキップ続行対応済み（Warn ログ）。
-FlipbookConstants.cs でパス文字列・オブジェクト名・Animatorパラメータ名を定数化済み。
-FFmpeg 動画入力モード実装済み（InputMode: VideoFile / PngSequence）。
-VideoFile がデフォルト。Assets 内 ObjectField で動画選択、ffprobe で参考情報表示。
-FlipbookVideoConverter.cs: FFmpeg 検出・ffprobe 情報取得・PNG 抽出→Texture2D[] 変換。
-スロット方式フォルダ構成実装済み（Generated_Flipbook/{番号}_{出力名}/）。
-出力名テキストフィールド（入力ソースから自動設定）＋スロットドロップダウン（自動新規/既存選択）。
-Material Index 廃止済み（UI・フィールド・AnimationBuilder パラメータ完全削除）。
-CountPngFiles / LoadAll の Generated_Flipbook 除外フィルタ修正済み。
-FFmpeg 音声抽出（ExtractAudio）実装済み。VideoFile モード時に「動画から音声を抽出」ボタンで WAV 抽出→AudioClip 自動セット。
-スロットブラウザ UI 実装済み（Foldout「生成済みスロット一覧」+ 概要表示 + Ping + 選択）。
-MergeAnimator OFF 時に _enableObjectToggle / _enableMenu を false リセット + 警告 HelpBox 追加済み。
-同一スロットでのモード変更時、Generate 前に旧生成物を全削除する処理（ClearSlotContents）追加済み。
-domain reload 対応済み（SerializeField 26件付与、_videoInfo は re-probe で復元）。
-LilToon 修正済み（_Cull=0 両面描画 + シェーダーキーワード _COLORADDSUBDIFF_ON / _SUNDISK_NONE）。
+### Prefab 生成・MA 連携
+- Prefab 生成対応（FlipbookPrefabBuilder）
+- MA optional 対応（リフレクション方式）
+- MultiPageSequence: MergeAnimator / ObjectToggle / Menu の 3 bool 制御
+- 3モード: ObjectToggle / Menu の 2 bool 制御
+- MA Menu 構造: MenuInstaller + SubMenu MenuItem → Toggle 子オブジェクト（3モード）/ Toggle + Loop + Reset 子オブジェクト（MultiPageSequence）
+- AudioSource 対応（Audio/ 子オブジェクト）。3モード: ObjectToggle 連動 / MultiPageSequence: Animation layer で m_IsActive 制御
+- 子オブジェクト並び順: MA Menu(0) → Audio(1) → Quad/Pages(2)
 
-### LilToon 固有知見
-- lilToon マテリアルを Quad に使う場合: `_Cull` を 0（Off / 両面描画）に設定する
-  → Unity の Quad は法線が +Z 方向でカメラに背を向けるため、Cull Back だと表面が描画されない
-  → 自前シェーダーは Cull Off が入っているので影響なし
-- lilToon の Main2nd DecalAnimation に必要なシェーダーキーワード:
-  `_COLORADDSUBDIFF_ON`（LIL_FEATURE_MAIN2ND）+ `_SUNDISK_NONE`（LIL_FEATURE_ANIMATE_DECAL）
-  → material.EnableKeyword() で設定する。SetFloat だけではキーワードが有効にならない
+### MultiPageSequence 固有
+- PNG 連番を複数スプライトシートに自動分割
+- AnimatorController でシームレスループ再生
+- Idle ステート（全ページ OFF）をデフォルトステートとして追加
+- AnimationClip は writeDefaultValues 非依存設計（自分 ON・他全ページ OFF・Audio m_IsActive 明示制御）
+- FlipbookEnabled（Bool）/ FlipbookLoop（Bool, default=true）/ FlipbookReset（Bool）の 3 パラメータ常時生成
+- ResetPage1 ステート: Audio m_IsActive OFF→ON で再生位置リセット、再生後 Page2 へ遷移
+- AnimatorController レイヤー名: "Flipbook"
 
-### 最大シートサイズについて
-- シートサイズを変えても総テクスチャ量はほぼ変わらない（1枚が重くなる vs 枚数が増える のトレードオフ）
-- パフォーマンスに一番効くのは FPS と 元 PNG の解像度 × フレーム数
-- シートサイズは「元 PNG に対して十分な器を確保するためにある」と理解するのが正確
-- ほとんどのユーザーは 2048 固定で困らないため、上級設定に隠している
-- ツールの最大シートサイズ（生成ピクセルサイズの上限）と Unity の Max Size（ビルド時の圧縮上限）は別物。元テクスチャが Unity の Max Size より小さければ影響なし
+### UI
+- FPS 補助計算 UI（分秒入力・Input Folder から自動カウント）
+- 最大シートサイズ選択（512/1024/2048/4096、デフォルト 2048、上級設定折りたたみ内）
+- プリセット UI（おすすめ / カスタム）全モード対応。セクション名「Prefab / MA 設定」に統一。モード切替時に「おすすめ」にリセット
+- MergeAnimator OFF 時の値リセット + 警告 HelpBox
+- 出力名テキストフィールド（入力ソースから自動設定）+ スロットドロップダウン
+- domain reload 対応済み（SerializeField + _videoInfo re-probe）
+- enableMenu=false 時は MA Menu を生成せず ObjectToggle を root に直接アタッチ
+- 結果ダイアログ: Dry Run / Generate 完了後に EditorUtility.DisplayDialog で表示。三分割（入力情報 / シート・生成情報 / MA 設定）。ページ構成は圧縮表示（64f×17 + 48f）
+- Generate 完了時に Prefab を Ping（未生成時は Material / Controller）
+- コンソールログ制御: FlipbookGeneratorLog.Enabled ゲート。上級設定内「コンソールにログを出力」トグル（デフォルト OFF）。Error は常時出力
 
-### PNG Sequence FPS について
-- UI の「PNG Sequence FPS」は元動画のFPSではなく、PNG書き出し時のFPSを入力する
-- FFmpegなどの書き出し設定で間引かれる場合があるため、
-  「枚数 ÷ 動画秒数」で実際の書き出しFPSを確認できる
+### アセット上書き
+- Material: CopyPropertiesFromMaterial で GUID 保持
+- Texture2DArray / AnimationClip: DeleteAsset → Refresh → CreateAsset
+- AnimatorController: DeleteAsset → CreateAnimatorControllerAtPath
+- PNG: File.WriteAllBytes（.meta 保持で GUID 不変）
 
-### 次フェーズ候補（後回し）
-- 途中から再開プリセットの追加（改善）
-  ※ keepAnimatorStateOnDisable ベース。VRChat 環境での動作未検証のため保留中。
-- OffReset モード（Object Toggle OFF で frame0 へ戻る）（改善）
-  ※ VRC 対応には bool パラメータ + Idle ステート +
-  MA パラメータドライバー連携が必要。実装コストが高いため次フェーズ
-- keepAnimatorStateOnDisable による途中再開（改善）
-  ※ MA なし・Animator 単体運用時に root をオンオフして途中から再開する方式
-  VRChat 環境での動作が未検証・不安定の可能性あり
-- Dry Run / Generate 結果ダイアログ（ShowModalUtility）
-- 再生モードチェックボックス化（OffReset 実装時）
-- UI 説明文整備（AudioClip 未指定警告・音源リセット HelpBox 含む）
-- lilToon プロパティ名ハードコード（バージョンアップ時に手動確認の運用）
-- プリセット UI を3モードにも実装する（UI改善）
-- おすすめプリセットの設定値を詰める（UI改善）
-- Generate 直後に Prefab を Ping（結果ダイアログと合わせて検討）
-- モードの処遇整理（SpriteSheet 除外の検討含む）
-- 動画トリミング機能（もしくはマルチ以外は上限秒数制限で映像品質維持）
-- Video モード + SpriteSheet/Texture2DArray のフレーム上限整理（メモリスパイク対策）
+### その他
+- ミップストリーミング常時 ON（TextureImporter.streamingMipmaps = true）
+- FrameLoader: 読み込み失敗スキップ続行（Warn ログ）
+- FlipbookConstants.cs でパス文字列・オブジェクト名・Animator パラメータ名・シェーダープロパティ名を定数化
+- MA enum は Enum.Parse + try-catch（数値直書き禁止）
+
+## 技術知見（flipbook 固有）
+
+### LilToon
+- Quad 使用時は _Cull=0（両面描画）必須（Quad の法線が +Z でカメラに背を向けるため）
+- Main2nd DecalAnimation に必要なキーワード: _COLORADDSUBDIFF_ON + _SUNDISK_NONE
+  → material.EnableKeyword() で設定（SetFloat だけでは不足）
+- Shader.Find("lilToon") で可用性検出（リフレクションより簡潔）
+
+### シートサイズ
+- シートサイズを変えても総テクスチャ量はほぼ不変（1枚が重い vs 枚数が多い）
+- パフォーマンスに効くのは FPS と元 PNG の解像度 × フレーム数
+- シートサイズは「元 PNG に対して十分な器を確保するため」と理解するのが正確
+- ほとんどのユーザーは 2048 固定で困らない
+- ツールの最大シートサイズ（生成ピクセルサイズの上限）と Unity の Max Size（ビルド時の圧縮上限）は別物
+
+### PNG Sequence FPS
+- UI の FPS は元動画の FPS ではなく PNG 書き出し時の FPS を入力する
+- FFmpeg 等で間引かれる場合があるため「枚数 ÷ 秒数」で確認
+
+### MA ObjectToggle / Menu 配置
+- ObjectToggle のターゲットは ObjectToggle より下の階層に置く（先祖オブジェクトは不可）
+- AvatarObjectReference は referencePath に相対パス文字列を直接セット + targetObject（NonPublic）に GameObject を直接セット
+  → Set(GameObject) を Prefab 保存前の一時オブジェクトに呼ぶとパス解決が壊れる
+- MenuInstaller は root 直付けせず専用子オブジェクト（例: MA Menu/）に置く
+  → MenuInstaller + SubMenu 型 MenuItem を同じオブジェクトにアタッチし、子の MenuItem を束ねる
+- subMenuSource は Children に明示設定（デフォルト値に依存しない）
+
+### FX レイヤーと表示制御
+- MergeAnimator で FX 統合された AnimatorController はアバタールートの Animator で常時動作
+- ObjectToggle でオフにしても FX 再生は止まらない
+- 「オフ中に止めて途中から再開」は VRChat + MergeAnimator 環境では実現困難
+- keepAnimatorStateOnDisable: MA なし・Animator 単体運用時にオブジェクトをオフにして途中から再開する手段として使える可能性があるが、VRChat 環境での動作は未検証・不安定の可能性あり
+- FX 制御（EX メニュー等）と Animator 停止（keepAnimatorState）は構造的に排他。MergeAnimator で FX 統合すると Animator は常時動作し止められない
+
+### writeDefaultValues 非依存設計
+- 各 AnimationClip が「自分 ON・他全ページ OFF」を明示キーフレームで制御
+- Audio m_IsActive も全ステート（Idle/Page1-N/ResetPage1）で明示キーフレームを持つ
+- WD = true のままでも問題ない（暗黙のデフォルト復帰に頼っていない）
+- 一部ステートだけで m_IsActive を操作すると WD=true の他ステートでデフォルト値に書き戻されるため、全ステートに明示キーフレームが必要
+
+### 音声と映像の同期制約
+- Texture2DArray / LilToon はシェーダーベースアニメーション（_Time 依存）で AnimatorController を使わないため、音声との再生同期は不可能
+- Audio 用途はループ BGM・環境音など同期不要のものに限られる
+- MultiPageSequence のみ Animator 制御なので Animation layer 連動で映像・音声の同期が可能
+
+### Audio 制御: m_IsActive vs m_Enabled
+- AudioSource.m_Enabled の OFF→ON では playOnAwake は発火しない（コンポーネント有効化のみ）
+- GameObject.m_IsActive の OFF→ON で playOnAwake が発火し、再生が先頭から始まる
+- MultiPageSequence の Audio 制御は m_IsActive を使用（全ステートで明示キーフレーム）
+
+## ファイル構成
 
 ### Editor (namespace: Sebanne.FlipbookMaterialGenerator.Editor)
 - `Editor/FlipbookMaterialGeneratorWindow.cs` — メインウィンドウ（`Tools/Sebanne/Flipbook Material Generator`）。入力モード切り替え（動画ファイル / PNG連番フォルダ）、出力先モード、スロット方式出力管理、FPS 設定、Prefab生成、Dry Run / Generate ボタン。
 - `Editor/Core/FlipbookConstants.cs` — パス文字列・オブジェクト名・Animatorパラメータ名・シェーダープロパティ名の定数定義。
-- `Editor/Core/FlipbookVideoConverter.cs` — FFmpeg 動画入力。IsFFmpegAvailable / Probe(ffprobe、音声トラック検出含む) / ExtractFrames(PNG抽出→Texture2D[]) / ExtractAudio(WAV抽出→AudioClip)。
+- `Editor/Core/FlipbookVideoConverter.cs` — FFmpeg 動画入力。IsFFmpegAvailable / Probe(ffprobe、音声トラック検出含む) / ExtractFrames(PNG抽出→Texture2D[]、ハッシュベースキャッシュ対応) / ExtractAudio(WAV抽出→AudioClip、キャッシュキー照合対応)。
 - `Editor/Core/FlipbookFrameLoader.cs` — PNG 連番読み込み。AssetDatabase 経由、上限なし（LoadAll）。読み込み失敗フレームはスキップ続行（Warn ログ）。Generated_Flipbook 除外フィルタ付き。
 - `Editor/Core/FlipbookSheetBuilder.cs` — スプライトシート生成。自動グリッド計算、最大 2048x2048。FlipbookSheetResult を返す。
-- `Editor/Core/FlipbookMaterialBuilder.cs` — マテリアル生成。Build / BuildFromArray / BuildForSequence / BuildForLilToon の 4 メソッド。既存マテリアルは CopyPropertiesFromMaterial で GUID 保持更新。
-- `Editor/Core/FlipbookPrefabBuilder.cs` — Prefab 生成。Build（3モード用）と BuildMultiPage（MultiPageSequence用）。MA Menu 構造（MenuInstaller + SubMenu MenuItem + ObjectToggle + Reset）を生成、MergeAnimator をアタッチ（リフレクション方式、optional、MultiPageSequence のみ）。
+- `Editor/Core/FlipbookMaterialBuilder.cs` — マテリアル生成。BuildFromArray / BuildForSequence / BuildForLilToon の 3 メソッド。既存マテリアルは CopyPropertiesFromMaterial で GUID 保持更新。
+- `Editor/Core/FlipbookPrefabBuilder.cs` — Prefab 生成。Build（3モード用）と BuildMultiPage（MultiPageSequence用）。MA Menu 構造（MenuInstaller + SubMenu MenuItem + ObjectToggle。MultiPageSequence は Toggle + Loop + Reset、3モードは Toggle のみ）を生成、MergeAnimator をアタッチ（リフレクション方式、optional、MultiPageSequence のみ）。
 - `Editor/Core/FlipbookPageSplitter.cs` — MultiPageSequence 用。PNG連番を複数ページ（スプライトシート）に分割。
 - `Editor/Core/FlipbookAnimationBuilder.cs` — MultiPageSequence 用。各ページのAnimationClipを生成。
-- `Editor/Core/FlipbookAnimatorBuilder.cs` — MultiPageSequence 用。AnimatorControllerを生成（Idle + Page ステート、FlipbookToggle / FlipbookReset パラメータ）。
-- `Editor/Diagnostics/FlipbookGeneratorLog.cs` — ログユーティリティ。prefix `[FlipbookMaterialGenerator]`。
+- `Editor/Core/FlipbookAnimatorBuilder.cs` — MultiPageSequence 用。AnimatorControllerを生成（Idle + Page + ResetPage1 ステート、FlipbookEnabled / FlipbookLoop / FlipbookReset パラメータ）。
+- `Editor/Core/FlipbookResultInfo.cs` — 結果ダイアログ用データクラス（IsDryRun / Success / ModeName / Lines / PingAssetPath）。
+- `Editor/Diagnostics/FlipbookGeneratorLog.cs` — ログユーティリティ。prefix `[FlipbookMaterialGenerator]`。Enabled ゲート付き（Info/Warn のみ、Error は常時出力）。
 
 ### Runtime
 - `Runtime/FlipbookSequenceShader.shader` — MultiPageSequence 用シェーダー。
+- `Runtime/FlipbookArrayShader.shader` — Texture2DArray 用シェーダー。
 
 ### asmdef
 - `Editor/Sebanne.FlipbookMaterialGenerator.Editor.asmdef`
@@ -142,3 +146,10 @@ LilToon 修正済み（_Cull=0 両面描画 + シェーダーキーワード _CO
 - まず短い plan を出してから作業する。
 - commit / push は明示的な指示があるまで行わない。
 - Editor-only ファイルの namespace は `Sebanne.FlipbookMaterialGenerator.Editor` に統一する。
+
+## 次フェーズ候補（後回し）
+- OffReset モード（Object Toggle OFF で frame0 へ戻る）（改善）
+  ※ VRC 対応には bool パラメータ + Idle ステート +
+  MA パラメータドライバー連携が必要。実装コストが高いため次フェーズ
+- UI 説明文整備（AudioClip 未指定警告・音源リセット HelpBox 含む）
+- lilToon プロパティ名ハードコード（バージョンアップ時に手動確認の運用）

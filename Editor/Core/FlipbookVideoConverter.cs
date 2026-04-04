@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using UnityEditor;
 using UnityEngine;
@@ -84,35 +86,52 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             }
         }
 
-        internal static Texture2D[] ExtractFrames(string fullPath, float fps, int maxResolution)
+        internal static Texture2D[] ExtractFrames(string fullPath, float fps, int maxResolution,
+            float startTime = 0f, float duration = 0f)
         {
-            var tempDir = Path.Combine(Path.GetTempPath(), "FlipbookFrames", Guid.NewGuid().ToString());
-            Directory.CreateDirectory(tempDir);
+            var mtime = File.GetLastWriteTimeUtc(fullPath).Ticks;
+            var cacheKey = $"{fullPath}|{fps}|{maxResolution}|{startTime:F2}|{duration:F2}|{mtime}";
+            var hash = ComputeShortHash(cacheKey);
+            var tempDir = Path.Combine(Path.GetTempPath(), "FlipbookFrames", hash);
 
             try
             {
-                EditorUtility.DisplayProgressBar("Flipbook Material Generator", "動画を PNG に変換中...", 0.5f);
-
-                var scaleFilter = $"fps={fps},scale={maxResolution}:{maxResolution}:force_original_aspect_ratio=decrease";
-                var outputPattern = Path.Combine(tempDir, "frame_%04d.png").Replace('\\', '/');
-
-                var psi = new ProcessStartInfo("ffmpeg",
-                    $"-i \"{fullPath}\" -vf \"{scaleFilter}\" \"{outputPattern}\"")
+                // Cache hit: reuse existing PNGs
+                var cached = Directory.Exists(tempDir) && Directory.GetFiles(tempDir, "*.png").Length > 0;
+                if (cached)
                 {
-                    CreateNoWindow = true,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = false,
-                    RedirectStandardError = true,
-                };
-
-                using (var proc = Process.Start(psi))
+                    FlipbookGeneratorLog.Info("Using cached frames.");
+                }
+                else
                 {
-                    var stderr = proc.StandardError.ReadToEnd();
-                    proc.WaitForExit(300000); // 5 min timeout
-                    if (proc.ExitCode != 0)
+                    Directory.CreateDirectory(tempDir);
+                    EditorUtility.DisplayProgressBar("Flipbook Material Generator", "動画を PNG に変換中...", 0.5f);
+
+                    var scaleFilter = $"fps={fps},scale={maxResolution}:{maxResolution}:force_original_aspect_ratio=decrease";
+                    var outputPattern = Path.Combine(tempDir, "frame_%04d.png").Replace('\\', '/');
+
+                    var hasTrim = startTime > 0f || duration > 0f;
+                    var ssArg = hasTrim ? $"-ss {startTime:F2} " : "";
+                    var tArg = duration > 0f ? $"-t {duration:F2} " : "";
+
+                    var psi = new ProcessStartInfo("ffmpeg",
+                        $"{ssArg}-i \"{fullPath}\" {tArg}-vf \"{scaleFilter}\" \"{outputPattern}\"")
                     {
-                        FlipbookGeneratorLog.Error($"FFmpeg failed (exit {proc.ExitCode}): {stderr}");
-                        return Array.Empty<Texture2D>();
+                        CreateNoWindow = true,
+                        UseShellExecute = false,
+                        RedirectStandardOutput = false,
+                        RedirectStandardError = true,
+                    };
+
+                    using (var proc = Process.Start(psi))
+                    {
+                        var stderr = proc.StandardError.ReadToEnd();
+                        proc.WaitForExit(300000); // 5 min timeout
+                        if (proc.ExitCode != 0)
+                        {
+                            FlipbookGeneratorLog.Error($"FFmpeg failed (exit {proc.ExitCode}): {stderr}");
+                            return Array.Empty<Texture2D>();
+                        }
                     }
                 }
 
@@ -156,12 +175,11 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             finally
             {
                 EditorUtility.ClearProgressBar();
-                try { Directory.Delete(tempDir, true); }
-                catch { /* cleanup best-effort */ }
             }
         }
 
-        internal static AudioClip ExtractAudio(string videoFullPath, string outputAssetDir, string baseName)
+        internal static AudioClip ExtractAudio(string videoFullPath, string outputAssetDir, string baseName,
+            float startTime = 0f, float duration = 0f)
         {
             var wavFileName = $"{baseName}_audio.wav";
             var wavAssetPath = $"{outputAssetDir}/{wavFileName}";
@@ -172,12 +190,35 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             if (!string.IsNullOrEmpty(dirFullPath) && !Directory.Exists(dirFullPath))
                 Directory.CreateDirectory(dirFullPath);
 
+            // Cache check: skip extraction if WAV exists with matching settings
+            var mtime = File.GetLastWriteTimeUtc(videoFullPath).Ticks;
+            var cacheKey = $"{videoFullPath}|{startTime:F2}|{duration:F2}|{mtime}";
+            var cacheKeyPath = Path.Combine(dirFullPath, "audio_cache_key.txt");
+            if (File.Exists(wavFullPath) && File.Exists(cacheKeyPath) && File.ReadAllText(cacheKeyPath) == cacheKey)
+            {
+                var existingClip = AssetDatabase.LoadAssetAtPath<AudioClip>(wavAssetPath);
+                if (existingClip != null)
+                {
+                    FlipbookGeneratorLog.Info("Using cached audio.");
+                    return existingClip;
+                }
+            }
+
+            // Remove existing WAV files in Audio/ to prevent accumulation
+            var existingWavs = AssetDatabase.FindAssets("t:AudioClip", new[] { outputAssetDir });
+            foreach (var guid in existingWavs)
+                AssetDatabase.DeleteAsset(AssetDatabase.GUIDToAssetPath(guid));
+
             try
             {
                 EditorUtility.DisplayProgressBar("Flipbook Material Generator", "音声を抽出中...", 0.5f);
 
-                var psi = new ProcessStartInfo("ffmpeg",
-                    $"-y -i \"{videoFullPath}\" -vn -acodec pcm_s16le \"{wavFullPath}\"")
+                var hasTrim = startTime > 0f || duration > 0f;
+                var ssArg = hasTrim ? $"-ss {startTime:F2} " : "";
+                var tArg = duration > 0f ? $"-t {duration:F2} " : "";
+
+                var ffmpegArgs = $"-y {ssArg}-i \"{videoFullPath}\" {tArg}-vn -acodec pcm_s16le \"{wavFullPath}\"";
+                var psi = new ProcessStartInfo("ffmpeg", ffmpegArgs)
                 {
                     CreateNoWindow = true,
                     UseShellExecute = false,
@@ -195,6 +236,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                         return null;
                     }
                 }
+
+                File.WriteAllText(cacheKeyPath, cacheKey);
 
                 AssetDatabase.ImportAsset(wavAssetPath, ImportAssetOptions.ForceUpdate);
                 var clip = AssetDatabase.LoadAssetAtPath<AudioClip>(wavAssetPath);
@@ -265,6 +308,18 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 info.Duration = float.Parse(durationMatch.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
 
             return info;
+        }
+
+        private static string ComputeShortHash(string input)
+        {
+            using (var md5 = MD5.Create())
+            {
+                var bytes = md5.ComputeHash(Encoding.UTF8.GetBytes(input));
+                var sb = new StringBuilder(16);
+                for (var i = 0; i < 8; i++)
+                    sb.Append(bytes[i].ToString("x2"));
+                return sb.ToString();
+            }
         }
     }
 }

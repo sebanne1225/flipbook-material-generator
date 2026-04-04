@@ -14,7 +14,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
         internal static string PagePath(int pageIndex) => $"{PagesObjectName}/{PageObjectName(pageIndex)}";
 
         // Animator parameter names
-        internal const string ToggleParameterName = "FlipbookToggle";
+        internal const string EnabledParameterName = "FlipbookEnabled";
+        internal const string LoopParameterName = "FlipbookLoop";
         internal const string ResetParameterName = "FlipbookReset";
 
         // Shader property names (cross-file references)

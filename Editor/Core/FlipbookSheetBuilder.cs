@@ -94,6 +94,13 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             return new FlipbookSheetResult(columns, rows, frames.Length, frameSize, outputPath);
         }
 
+        internal static int CalculateMaxFrames(int maxSheetSize, int frameSize = DefaultFrameSize)
+        {
+            var cols = maxSheetSize / frameSize;
+            var rows = maxSheetSize / frameSize;
+            return cols * rows;
+        }
+
         internal static (int columns, int rows) CalculateGrid(int frameCount)
         {
             if (frameCount <= 0) return (0, 0);

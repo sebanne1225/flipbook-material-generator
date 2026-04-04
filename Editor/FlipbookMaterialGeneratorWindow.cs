@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -10,7 +11,6 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 {
     internal enum OutputMode
     {
-        SpriteSheet,
         Texture2DArray,
         LilToon,
         MultiPageSequence,
@@ -29,12 +29,6 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
         PngSequence,
     }
 
-    internal enum PlaybackMode
-    {
-        Loop,
-        ManualReset,
-    }
-
     public sealed class FlipbookMaterialGeneratorWindow : EditorWindow
     {
         private const string WindowTitle = "Flipbook Material Generator";
@@ -50,14 +44,14 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
         private bool _ffmpegChecked;    // intentionally reset on domain reload
 
         [SerializeField] private DefaultAsset _outputFolder;
-        [SerializeField] private OutputMode _outputMode = OutputMode.SpriteSheet;
+        [SerializeField] private OutputMode _outputMode = OutputMode.MultiPageSequence;
         [SerializeField] private OutputFolderMode _outputFolderMode = OutputFolderMode.ToolDefault;
         [SerializeField] private int _maxSheetSize = 2048;
         [SerializeField] private bool _showAdvanced = false;
+        [SerializeField] private bool _enableConsoleLog;
         [SerializeField] private float _fps = 8f;
         [SerializeField] private bool _generatePrefab;
         [SerializeField] private string _toggleName = "Flipbook";
-        [SerializeField] private PlaybackMode _playbackMode = PlaybackMode.Loop;
 
         private enum FlipbookPreset { Recommended, Custom }
         [SerializeField] private FlipbookPreset _preset = FlipbookPreset.Recommended;
@@ -91,6 +85,11 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             internal bool HasAudio;
         }
 
+        // Trim (Video mode)
+        [SerializeField] private bool _enableTrim;
+        [SerializeField] private float _trimStart;
+        [SerializeField] private float _trimDuration;
+
         // FPS helper
         [SerializeField] private int _fpsCalcFrameCount;
         [SerializeField] private int _fpsCalcMinutes;
@@ -106,19 +105,49 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
         private void ApplyPreset(FlipbookPreset preset)
         {
-            switch (preset)
+            if (preset != FlipbookPreset.Recommended) return;
+
+            if (_outputMode == OutputMode.MultiPageSequence)
             {
-                case FlipbookPreset.Recommended:
-                    _playbackMode = PlaybackMode.Loop;
-                    _enableMergeAnimator = true;
-                    _enableObjectToggle = true;
-                    _enableMenu = true;
-                    _enableAudioSource = false;
-                    break;
-                case FlipbookPreset.Custom:
-                    break;
+                _enableMergeAnimator = true;
+                _enableObjectToggle = true;
+                _enableMenu = true;
+                _enableAudioSource = false;
+            }
+            else
+            {
+                _enableObjectToggle = true;
+                _enableMenu = true;
+                _enableAudioSource = false;
             }
         }
+
+        private static void ShowResultDialog(FlipbookResultInfo info)
+        {
+            string title;
+            if (info.IsDryRun)
+                title = "Dry Run 結果";
+            else
+                title = info.Success ? "Generate 完了" : "Generate 失敗";
+
+            var message = string.Join("\n", info.Lines);
+            EditorUtility.DisplayDialog(title, message, "OK");
+        }
+
+        private void AppendSettingsLines(FlipbookResultInfo result)
+        {
+            result.Lines.Add("");
+            if (!_generatePrefab) { result.Lines.Add("Prefab: OFF"); return; }
+
+            result.Lines.Add("Prefab: ON");
+            if (_outputMode == OutputMode.MultiPageSequence)
+                result.Lines.Add($"  MergeAnimator: {OnOff(_enableMergeAnimator)}");
+            result.Lines.Add($"  ObjectToggle: {OnOff(_enableObjectToggle)}");
+            result.Lines.Add($"  Menu: {OnOff(_enableMenu)}");
+            result.Lines.Add($"  AudioSource: {OnOff(_enableAudioSource)}");
+        }
+
+        private static string OnOff(bool v) => v ? "ON" : "OFF";
 
         [MenuItem("Tools/Sebanne/Flipbook Material Generator")]
         private static void Open()
@@ -269,12 +298,23 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             }
 
             // Output mode
-            _outputMode = (OutputMode)EditorGUILayout.EnumPopup("Output Mode", _outputMode);
+            var modeLabels = new[] { "Texture2DArray", "LilToon", "MultiPageSequence" };
+            var modeValues = new[] { OutputMode.Texture2DArray, OutputMode.LilToon, OutputMode.MultiPageSequence };
+            var modeIndex = Array.IndexOf(modeValues, _outputMode);
+            if (modeIndex < 0) modeIndex = 2; // fallback: MultiPageSequence
+            var prevOutputMode = _outputMode;
+            modeIndex = EditorGUILayout.Popup("Output Mode", modeIndex, modeLabels);
+            _outputMode = modeValues[modeIndex];
+            if (_outputMode != prevOutputMode)
+            {
+                _preset = FlipbookPreset.Recommended;
+                ApplyPreset(_preset);
+            }
 
             if (_outputMode == OutputMode.LilToon && !FlipbookMaterialBuilder.IsLilToonAvailable())
             {
                 EditorGUILayout.HelpBox(
-                    "lilToon がプロジェクトに導入されていません。SpriteSheet モードを使用してください。",
+                    "lilToon がプロジェクトに導入されていません。Texture2DArray モードを使用してください。",
                     MessageType.Warning);
             }
 
@@ -322,6 +362,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                     }
                     if (_framesPerPage < 1) _framesPerPage = 1;
                 }
+
+                _enableConsoleLog = EditorGUILayout.Toggle("コンソールにログを出力", _enableConsoleLog);
             }
 
             // MultiPageSequence settings
@@ -334,7 +376,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 var frameCountForPreview = 0;
                 if (_inputMode == InputMode.VideoFile && _videoInfo != null)
                 {
-                    frameCountForPreview = Mathf.RoundToInt(_videoInfo.Duration * _fps);
+                    var effectiveDuration = _enableTrim && _trimDuration > 0f ? _trimDuration : _videoInfo.Duration;
+                    frameCountForPreview = Mathf.RoundToInt(effectiveDuration * _fps);
                 }
                 else
                 {
@@ -360,12 +403,39 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
                 if (_videoInfo != null)
                 {
-                    var estimatedFrames = Mathf.RoundToInt(_videoInfo.Duration * _fps);
+                    var fullEstimatedFrames = Mathf.RoundToInt(_videoInfo.Duration * _fps);
                     EditorGUILayout.HelpBox(
                         $"元動画: {_videoInfo.Width}x{_videoInfo.Height}, " +
                         $"{_videoInfo.Fps:F1}fps, {_videoInfo.Duration:F1}秒\n" +
-                        $"書き出し {_fps:F1}fps → 推定 {estimatedFrames} フレーム",
+                        $"書き出し {_fps:F1}fps → 推定 {fullEstimatedFrames} フレーム",
                         MessageType.Info);
+                }
+
+                // Trim
+                _enableTrim = EditorGUILayout.Toggle("トリミング", _enableTrim);
+                if (_enableTrim)
+                {
+                    EditorGUI.indentLevel++;
+                    _trimStart = EditorGUILayout.FloatField("開始（秒）", _trimStart);
+                    if (_trimStart < 0f) _trimStart = 0f;
+                    _trimDuration = EditorGUILayout.FloatField("長さ（秒）", _trimDuration);
+                    if (_trimDuration < 0f) _trimDuration = 0f;
+
+                    if (_trimDuration > 0f)
+                    {
+                        var trimFrames = Mathf.RoundToInt(_trimDuration * _fps);
+                        EditorGUILayout.HelpBox(
+                            $"トリミング後: {_trimDuration:F1}秒 × {_fps:F1}fps = 推定 {trimFrames} フレーム",
+                            MessageType.Info);
+                    }
+
+                    if (_videoInfo != null && _trimStart + _trimDuration > _videoInfo.Duration && _trimDuration > 0f)
+                    {
+                        EditorGUILayout.HelpBox(
+                            $"開始+長さ ({_trimStart + _trimDuration:F1}秒) が動画長 ({_videoInfo.Duration:F1}秒) を超えています",
+                            MessageType.Warning);
+                    }
+                    EditorGUI.indentLevel--;
                 }
             }
             else
@@ -411,7 +481,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             if (_generatePrefab && _outputMode == OutputMode.MultiPageSequence)
             {
                 EditorGUILayout.Space();
-                EditorGUILayout.LabelField("再生・MA 設定", EditorStyles.boldLabel);
+                EditorGUILayout.LabelField("Prefab / MA 設定", EditorStyles.boldLabel);
 
                 // Preset toolbar
                 var presetLabels = new[] { "おすすめ", "カスタム" };
@@ -427,8 +497,6 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
                 // Individual settings (always visible)
                 EditorGUI.BeginChangeCheck();
-
-                _playbackMode = (PlaybackMode)EditorGUILayout.EnumPopup("再生モード", _playbackMode);
 
                 _enableMergeAnimator = EditorGUILayout.Toggle("MA Merge Animator", _enableMergeAnimator);
 
@@ -473,8 +541,22 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             }
             else if (_generatePrefab)
             {
-                // Non-MultiPageSequence modes: simple MA toggles
+                EditorGUILayout.Space();
+                EditorGUILayout.LabelField("Prefab / MA 設定", EditorStyles.boldLabel);
+
+                // Preset toolbar
+                var presetLabels3 = new[] { "おすすめ", "カスタム" };
+                EditorGUI.BeginChangeCheck();
+                var newPreset3 = (FlipbookPreset)GUILayout.Toolbar((int)_preset, presetLabels3);
+                if (EditorGUI.EndChangeCheck() && newPreset3 != _preset)
+                {
+                    _preset = newPreset3;
+                    ApplyPreset(_preset);
+                }
+
                 EditorGUI.indentLevel++;
+                EditorGUI.BeginChangeCheck();
+
                 _enableObjectToggle = EditorGUILayout.Toggle("MA Object Toggle を追加", _enableObjectToggle);
                 if (_enableObjectToggle)
                 {
@@ -497,6 +579,10 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                         DrawExtractAudioButton();
                     }
                 }
+
+                if (EditorGUI.EndChangeCheck())
+                    _preset = FlipbookPreset.Custom;
+
                 EditorGUI.indentLevel--;
             }
 
@@ -515,24 +601,64 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 hasInput = inputPath != null && AssetDatabase.IsValidFolder(inputPath);
             }
 
-            using (new EditorGUI.DisabledScope(!hasInput || !hasOutputName))
+            // Frame limit check for non-MultiPageSequence modes
+            var exceedsFrameLimit = false;
+            if (_outputMode != OutputMode.MultiPageSequence && hasInput)
+            {
+                var maxFrames = FlipbookSheetBuilder.CalculateMaxFrames(_maxSheetSize);
+                int estimatedFrameCount;
+                if (_inputMode == InputMode.VideoFile && _videoInfo != null)
+                {
+                    var effectiveDur = _enableTrim && _trimDuration > 0f ? _trimDuration : _videoInfo.Duration;
+                    estimatedFrameCount = Mathf.RoundToInt(effectiveDur * _fps);
+                }
+                else
+                {
+                    var countPath = AssetPathOrNull(_inputFolder);
+                    estimatedFrameCount = countPath != null ? CountPngFiles(countPath) : 0;
+                }
+
+                if (estimatedFrameCount > maxFrames)
+                {
+                    exceedsFrameLimit = true;
+                    EditorGUILayout.HelpBox(
+                        $"フレーム数（推定 {estimatedFrameCount}）が最大シートサイズの収容上限（{maxFrames} フレーム）を超えています。\n" +
+                        "トリミングで減らすか、MultiPageSequence モードを使用してください。",
+                        MessageType.Error);
+                }
+            }
+
+            using (new EditorGUI.DisabledScope(!hasInput || !hasOutputName || exceedsFrameLimit))
             {
                 using (new EditorGUILayout.HorizontalScope())
                 {
                     if (GUILayout.Button("Dry Run"))
                     {
+                        FlipbookGeneratorLog.Enabled = _enableConsoleLog;
+                        FlipbookResultInfo result;
                         if (_inputMode == InputMode.VideoFile)
-                            RunDryRunFromVideo();
+                            result = RunDryRunFromVideo();
                         else
-                            RunDryRun(AssetPathOrNull(_inputFolder));
+                            result = RunDryRun(AssetPathOrNull(_inputFolder));
+                        if (result != null)
+                            ShowResultDialog(result);
                     }
 
                     if (GUILayout.Button("Generate"))
                     {
+                        FlipbookGeneratorLog.Enabled = _enableConsoleLog;
+                        FlipbookResultInfo result;
                         if (_inputMode == InputMode.VideoFile)
-                            RunGenerateFromVideo();
+                            result = RunGenerateFromVideo();
                         else
-                            RunGenerate(AssetPathOrNull(_inputFolder));
+                            result = RunGenerate(AssetPathOrNull(_inputFolder));
+                        if (result != null)
+                        {
+                            if (!string.IsNullOrEmpty(result.PingAssetPath))
+                                EditorGUIUtility.PingObject(
+                                    AssetDatabase.LoadMainAssetAtPath(result.PingAssetPath));
+                            ShowResultDialog(result);
+                        }
                     }
                 }
             }
@@ -585,21 +711,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                     {
                         using (new EditorGUILayout.HorizontalScope(EditorStyles.helpBox))
                         {
-                            EditorGUILayout.LabelField(slot.FolderName, EditorStyles.boldLabel, GUILayout.MinWidth(120));
-
-                            var summary = $"Sheets:{slot.SheetCount}  Mat:{slot.MaterialCount}  " +
-                                          $"Prefab:{(slot.HasPrefab ? "\u25cb" : "\u00d7")}  " +
-                                          $"Audio:{(slot.HasAudio ? "\u25cb" : "\u00d7")}";
-                            EditorGUILayout.LabelField(summary, EditorStyles.miniLabel, GUILayout.MinWidth(200));
-
-                            if (GUILayout.Button("Ping", GUILayout.Width(40)))
-                            {
-                                var folderAsset = AssetDatabase.LoadAssetAtPath<DefaultAsset>(slot.AssetPath);
-                                if (folderAsset != null)
-                                    EditorGUIUtility.PingObject(folderAsset);
-                            }
-
-                            if (GUILayout.Button("選択", GUILayout.Width(40)))
+                            if (GUILayout.Button(slot.FolderName, EditorStyles.boldLabel, GUILayout.MinWidth(120)))
                             {
                                 RefreshSlotList();
                                 for (var i = 0; i < _slotFolderNames.Length; i++)
@@ -609,6 +721,35 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                                         _slotIndex = i + 1;
                                         break;
                                     }
+                                }
+                            }
+
+                            var summary = $"Sheets:{slot.SheetCount}  Mat:{slot.MaterialCount}  " +
+                                          $"Prefab:{(slot.HasPrefab ? "\u25cb" : "\u00d7")}  " +
+                                          $"Audio:{(slot.HasAudio ? "\u25cb" : "\u00d7")}";
+                            EditorGUILayout.LabelField(summary, EditorStyles.miniLabel, GUILayout.MinWidth(200));
+
+                            if (GUILayout.Button("フォルダを開く", GUILayout.Width(80)))
+                            {
+                                var folderAsset = AssetDatabase.LoadAssetAtPath<DefaultAsset>(slot.AssetPath);
+                                if (folderAsset != null)
+                                    EditorGUIUtility.PingObject(folderAsset);
+                            }
+
+                            if (GUILayout.Button("削除", GUILayout.Width(40)))
+                            {
+                                if (EditorUtility.DisplayDialog(
+                                    "スロット削除",
+                                    $"{slot.FolderName} を削除しますか？\nAudio を含むすべてのファイルが削除されます。",
+                                    "削除", "キャンセル"))
+                                {
+                                    if (_slotIndex > 0 && _slotIndex <= _slotFolderNames.Length
+                                        && _slotFolderNames[_slotIndex - 1] == slot.FolderName)
+                                        _slotIndex = 0;
+                                    AssetDatabase.DeleteAsset(slot.AssetPath);
+                                    RefreshSlotList();
+                                    RefreshSlotBrowser();
+                                    GUIUtility.ExitGUI();
                                 }
                             }
                         }
@@ -631,76 +772,51 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             return count;
         }
 
-        private void RunDryRun(string inputPath)
+        private FlipbookResultInfo RunDryRun(string inputPath)
         {
             var count = CountPngFiles(inputPath);
 
             if (count == 0)
             {
                 FlipbookGeneratorLog.Error($"[Dry Run] No PNG files found in: {inputPath}");
-                return;
+                return new FlipbookResultInfo { IsDryRun = true, Success = false, Lines = { "PNG ファイルが見つかりません: " + inputPath } };
+            }
+
+            if (_outputMode != OutputMode.MultiPageSequence)
+            {
+                var maxFrames = FlipbookSheetBuilder.CalculateMaxFrames(_maxSheetSize);
+                if (count > maxFrames)
+                    FlipbookGeneratorLog.Warn(
+                        $"[Dry Run] フレーム数 ({count}) が収容上限 ({maxFrames}) を超えています。" +
+                        "MultiPageSequence モードの使用を検討してください。");
             }
 
             switch (_outputMode)
             {
                 case OutputMode.Texture2DArray:
-                    RunDryRunArray(count);
-                    break;
+                    return RunDryRunArray(count);
                 case OutputMode.LilToon:
-                    RunDryRunLilToon(count);
-                    break;
+                    return RunDryRunLilToon(count);
                 case OutputMode.MultiPageSequence:
-                    RunDryRunMultiPage(count);
-                    break;
+                    return RunDryRunMultiPage(count);
                 default:
-                    RunDryRunSheet(count);
-                    break;
+                    return null;
             }
         }
 
-        private void RunDryRunSheet(int count)
+        private FlipbookResultInfo RunDryRunArray(int count)
         {
-            var clamped = count > 64;
-            var frameCount = clamped ? 64 : count;
-            var (columns, rows) = FlipbookSheetBuilder.CalculateGrid(frameCount);
-            var frameSize = 256;
-            var sheetWidth = columns * frameSize;
-            var sheetHeight = rows * frameSize;
-
-            if (sheetWidth > _maxSheetSize || sheetHeight > _maxSheetSize)
-            {
-                frameSize = Mathf.Min(_maxSheetSize / columns, _maxSheetSize / rows);
-                sheetWidth = columns * frameSize;
-                sheetHeight = rows * frameSize;
-            }
-
-            FlipbookGeneratorLog.Info(
-                $"[Dry Run] Mode: SpriteSheet, Frames: {count}" +
-                (clamped ? " (clamped to 64)" : "") +
-                $", Grid: {columns}x{rows}" +
-                $", Output: {sheetWidth}x{sheetHeight}px" +
-                $", Frame size: {frameSize}px");
-
-            if (clamped)
-            {
-                FlipbookGeneratorLog.Warn(
-                    $"[Dry Run] {count} frames exceed the 64-frame limit. Only the first 64 will be used.");
-            }
-
-            if (sheetWidth > _maxSheetSize || sheetHeight > _maxSheetSize)
-            {
-                FlipbookGeneratorLog.Warn(
-                    $"[Dry Run] Output exceeds {_maxSheetSize}px. Quest compatibility may be affected.");
-            }
-        }
-
-        private void RunDryRunArray(int count)
-        {
+            var result = new FlipbookResultInfo { IsDryRun = true, ModeName = "Texture2DArray" };
             var clamped = count > 64;
             var frameCount = clamped ? 64 : count;
             var frameSize = 256;
             var estimatedBytes = (long)frameCount * frameSize * frameSize * 4;
             var estimatedMB = estimatedBytes / (1024f * 1024f);
+
+            result.Lines.Add($"Mode: Texture2DArray");
+            result.Lines.Add($"Frames: {count}" + (clamped ? " (clamped to 64)" : ""));
+            result.Lines.Add($"Frame size: {frameSize}px");
+            result.Lines.Add($"Estimated: ~{estimatedMB:F1}MB (RGBA32, 未圧縮)");
 
             FlipbookGeneratorLog.Info(
                 $"[Dry Run] Mode: Texture2DArray, Frames: {count}" +
@@ -710,17 +826,27 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
             if (clamped)
             {
+                result.Lines.Add($"⚠ {count} フレームは上限 64 を超えています。先頭 64 フレームのみ使用されます。");
                 FlipbookGeneratorLog.Warn(
                     $"[Dry Run] {count} frames exceed the 64-frame limit. Only the first 64 will be used.");
             }
+
+            result.Lines.Add("");
+            result.Lines.Add($"生成予定: 1 Texture2DArray, 1 Material" + (_generatePrefab ? ", 1 Prefab" : ""));
+            AppendSettingsLines(result);
+            return result;
         }
 
-        private void RunDryRunLilToon(int count)
+        private FlipbookResultInfo RunDryRunLilToon(int count)
         {
+            var result = new FlipbookResultInfo { IsDryRun = true, ModeName = "LilToon" };
+
             if (!FlipbookMaterialBuilder.IsLilToonAvailable())
             {
                 FlipbookGeneratorLog.Error("[Dry Run] lilToon is not installed in this project.");
-                return;
+                result.Success = false;
+                result.Lines.Add("lilToon がプロジェクトに導入されていません。");
+                return result;
             }
 
             var clamped = count > 64;
@@ -736,6 +862,11 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 sheetWidth = columns * frameSize;
                 sheetHeight = rows * frameSize;
             }
+
+            result.Lines.Add($"Mode: LilToon (Main2nd DecalAnimation)");
+            result.Lines.Add($"Frames: {count}" + (clamped ? " (clamped to 64)" : ""));
+            result.Lines.Add($"Grid: {columns}x{rows}, Sheet: {sheetWidth}x{sheetHeight}px");
+            result.Lines.Add($"DecalAnimation: ({columns}, {rows}, {frameCount}, {_fps})");
 
             FlipbookGeneratorLog.Info(
                 $"[Dry Run] Mode: LilToon (Main2nd DecalAnimation), Frames: {count}" +
@@ -746,19 +877,27 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
             if (clamped)
             {
+                result.Lines.Add($"⚠ {count} フレームは上限 64 を超えています。先頭 64 フレームのみ使用されます。");
                 FlipbookGeneratorLog.Warn(
                     $"[Dry Run] {count} frames exceed the 64-frame limit. Only the first 64 will be used.");
             }
 
             if (sheetWidth > _maxSheetSize || sheetHeight > _maxSheetSize)
             {
+                result.Lines.Add($"⚠ 出力が {_maxSheetSize}px を超えています。Quest 互換性に影響する可能性があります。");
                 FlipbookGeneratorLog.Warn(
                     $"[Dry Run] Output exceeds {_maxSheetSize}px. Quest compatibility may be affected.");
             }
+
+            result.Lines.Add("");
+            result.Lines.Add($"生成予定: 1 SpriteSheet, 1 Material" + (_generatePrefab ? ", 1 Prefab" : ""));
+            AppendSettingsLines(result);
+            return result;
         }
 
-        private void RunDryRunMultiPage(int count)
+        private FlipbookResultInfo RunDryRunMultiPage(int count)
         {
+            var result = new FlipbookResultInfo { IsDryRun = true, ModeName = "MultiPageSequence" };
             var fpp = _framesPerPage > 0 ? _framesPerPage : FlipbookPageSplitter.CalculateFramesPerPage(_maxSheetSize);
             var pageCount = Mathf.CeilToInt((float)count / fpp);
             var preview = BuildSplitPreview(count, fpp);
@@ -768,6 +907,15 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             var sheetWidth = columns * frameSize;
             var sheetHeight = rows * frameSize;
 
+            result.Lines.Add($"Mode: MultiPageSequence");
+            result.Lines.Add($"Total frames: {count}, FPS: {_fps}");
+            result.Lines.Add("");
+            result.Lines.Add($"Pages: {preview}");
+            result.Lines.Add($"Sheet per page: {sheetWidth}x{sheetHeight}px ({columns}x{rows})");
+            result.Lines.Add($"生成予定: {pageCount} sheets, {pageCount} materials, " +
+                $"{pageCount} AnimationClips, 1 AnimatorController" +
+                (_generatePrefab ? ", 1 Prefab" : ""));
+
             FlipbookGeneratorLog.Info(
                 $"[Dry Run] Mode: MultiPageSequence, Total frames: {count}, " +
                 $"Pages: {preview}, Sheet per page: {sheetWidth}x{sheetHeight}px ({columns}x{rows}), FPS: {_fps}");
@@ -776,12 +924,15 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 $"[Dry Run] 生成予定: {pageCount} sheets, {pageCount} materials, " +
                 $"{pageCount} AnimationClips, 1 AnimatorController" +
                 (_generatePrefab ? ", 1 Prefab" : ""));
+
+            AppendSettingsLines(result);
+            return result;
         }
 
-        private void RunGenerate(string inputPath)
+        private FlipbookResultInfo RunGenerate(string inputPath)
         {
             var frames = FlipbookFrameLoader.Load(inputPath);
-            if (frames.Length == 0) return;
+            if (frames.Length == 0) return null;
 
             var outputDir = ResolveSlotDir(inputPath);
             EnsureFolderExists(outputDir);
@@ -789,118 +940,135 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 ClearSlotContents(outputDir);
             var baseName = _outputName;
 
+            FlipbookResultInfo result;
             switch (_outputMode)
             {
                 case OutputMode.Texture2DArray:
-                    GenerateArray(frames, outputDir, baseName);
+                    result = GenerateArray(frames, outputDir, baseName);
                     break;
                 case OutputMode.LilToon:
-                    GenerateLilToon(frames, outputDir, baseName);
+                    result = GenerateLilToon(frames, outputDir, baseName);
                     break;
                 case OutputMode.MultiPageSequence:
                     var allFrames = FlipbookFrameLoader.LoadAll(inputPath);
-                    if (allFrames.Length == 0) return;
-                    GenerateMultiPageSequenceFromFrames(allFrames, outputDir, baseName);
+                    if (allFrames.Length == 0) return null;
+                    result = GenerateMultiPageSequenceFromFrames(allFrames, outputDir, baseName);
                     break;
                 default:
-                    GenerateSheet(frames, outputDir, baseName);
+                    result = null;
                     break;
             }
 
             RefreshSlotList();
+            return result;
         }
 
-        private void GenerateSheet(Texture2D[] frames, string outputDir, string baseName)
+        private FlipbookResultInfo GenerateArray(Texture2D[] frames, string outputDir, string baseName)
         {
-            var sheetPath = $"{outputDir}/{baseName}_Sheet.png";
-            var matPath = $"{outputDir}/{baseName}_Flipbook.mat";
-
-            var sheetResult = FlipbookSheetBuilder.Build(frames, sheetPath, _maxSheetSize);
-            if (sheetResult == null) return;
-
-            var sheetTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(sheetResult.SavedPath);
-            if (sheetTexture == null)
-            {
-                FlipbookGeneratorLog.Error($"Failed to load generated sheet: {sheetResult.SavedPath}");
-                return;
-            }
-
-            var material = FlipbookMaterialBuilder.Build(sheetResult, sheetTexture, matPath, _fps);
-            if (material == null) return;
-
-            FlipbookGeneratorLog.Info(
-                $"Generation complete: {sheetResult.TotalFrames} frames -> {sheetPath}, {matPath}");
-
-            if (_generatePrefab)
-                FlipbookPrefabBuilder.Build(material, outputDir, baseName, _enableObjectToggle, _toggleName, _enableMenu, _enableAudioSource, _audioClip);
-
-            EditorGUIUtility.PingObject(material);
-        }
-
-        private void GenerateArray(Texture2D[] frames, string outputDir, string baseName)
-        {
+            var result = new FlipbookResultInfo { ModeName = "Texture2DArray" };
             var arrayPath = $"{outputDir}/{baseName}_Array.asset";
             var matPath = $"{outputDir}/{baseName}_FlipbookArray.mat";
 
             var arrayResult = FlipbookArrayBuilder.Build(frames, arrayPath);
-            if (arrayResult == null) return;
+            if (arrayResult == null) { result.Success = false; result.Lines.Add("Texture2DArray の生成に失敗しました。"); return result; }
 
             var texArray = AssetDatabase.LoadAssetAtPath<Texture2DArray>(arrayResult.SavedPath);
             if (texArray == null)
             {
                 FlipbookGeneratorLog.Error($"Failed to load generated array: {arrayResult.SavedPath}");
-                return;
+                result.Success = false;
+                result.Lines.Add($"生成した Texture2DArray の読み込みに失敗しました: {arrayResult.SavedPath}");
+                return result;
             }
 
             var material = FlipbookMaterialBuilder.BuildFromArray(arrayResult, texArray, matPath, _fps);
-            if (material == null) return;
+            if (material == null) { result.Success = false; result.Lines.Add("Material の生成に失敗しました。"); return result; }
 
             FlipbookGeneratorLog.Info(
                 $"Generation complete: {arrayResult.TotalFrames} frames -> {arrayPath}, {matPath}");
 
-            if (_generatePrefab)
-                FlipbookPrefabBuilder.Build(material, outputDir, baseName, _enableObjectToggle, _toggleName, _enableMenu, _enableAudioSource, _audioClip);
+            result.Lines.Add($"生成完了: {arrayResult.TotalFrames} フレーム, FPS: {_fps}");
+            result.Lines.Add("");
+            result.Lines.Add($"Texture2DArray: {Path.GetFileName(arrayPath)}");
+            result.Lines.Add($"Material: {Path.GetFileName(matPath)}");
 
-            EditorGUIUtility.PingObject(material);
+            string prefabPath = null;
+            if (_generatePrefab)
+                prefabPath = FlipbookPrefabBuilder.Build(material, outputDir, baseName, _enableObjectToggle, _toggleName, _enableMenu, _enableAudioSource, _audioClip);
+
+            if (prefabPath != null)
+            {
+                result.Lines.Add($"Prefab: {Path.GetFileName(prefabPath)}");
+                result.PingAssetPath = prefabPath;
+            }
+            else
+            {
+                result.PingAssetPath = matPath;
+            }
+
+            AppendSettingsLines(result);
+            return result;
         }
 
-        private void GenerateLilToon(Texture2D[] frames, string outputDir, string baseName)
+        private FlipbookResultInfo GenerateLilToon(Texture2D[] frames, string outputDir, string baseName)
         {
+            var result = new FlipbookResultInfo { ModeName = "LilToon" };
             var sheetPath = $"{outputDir}/{baseName}_Sheet.png";
             var matPath = $"{outputDir}/{baseName}_LilToon.mat";
 
             var sheetResult = FlipbookSheetBuilder.Build(frames, sheetPath, _maxSheetSize);
-            if (sheetResult == null) return;
+            if (sheetResult == null) { result.Success = false; result.Lines.Add("スプライトシートの生成に失敗しました。"); return result; }
 
             var sheetTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(sheetResult.SavedPath);
             if (sheetTexture == null)
             {
                 FlipbookGeneratorLog.Error($"Failed to load generated sheet: {sheetResult.SavedPath}");
-                return;
+                result.Success = false;
+                result.Lines.Add($"生成したスプライトシートの読み込みに失敗しました: {sheetResult.SavedPath}");
+                return result;
             }
 
             var material = FlipbookMaterialBuilder.BuildForLilToon(
                 sheetTexture, sheetResult.Columns, sheetResult.Rows,
                 sheetResult.TotalFrames, matPath, _fps);
-            if (material == null) return;
+            if (material == null) { result.Success = false; result.Lines.Add("Material の生成に失敗しました。"); return result; }
 
             FlipbookGeneratorLog.Info(
                 $"Generation complete: {sheetResult.TotalFrames} frames -> {sheetPath}, {matPath}");
 
-            if (_generatePrefab)
-                FlipbookPrefabBuilder.Build(material, outputDir, baseName, _enableObjectToggle, _toggleName, _enableMenu, _enableAudioSource, _audioClip);
+            result.Lines.Add($"生成完了: {sheetResult.TotalFrames} フレーム, FPS: {_fps}");
+            result.Lines.Add($"Grid: {sheetResult.Columns}x{sheetResult.Rows}, Sheet: {sheetResult.Columns * 256}x{sheetResult.Rows * 256}px");
+            result.Lines.Add("");
+            result.Lines.Add($"SpriteSheet: {Path.GetFileName(sheetPath)}");
+            result.Lines.Add($"Material: {Path.GetFileName(matPath)}");
 
-            EditorGUIUtility.PingObject(material);
+            string prefabPath = null;
+            if (_generatePrefab)
+                prefabPath = FlipbookPrefabBuilder.Build(material, outputDir, baseName, _enableObjectToggle, _toggleName, _enableMenu, _enableAudioSource, _audioClip);
+
+            if (prefabPath != null)
+            {
+                result.Lines.Add($"Prefab: {Path.GetFileName(prefabPath)}");
+                result.PingAssetPath = prefabPath;
+            }
+            else
+            {
+                result.PingAssetPath = matPath;
+            }
+
+            AppendSettingsLines(result);
+            return result;
         }
 
-        private void GenerateMultiPageSequenceFromFrames(Texture2D[] allFrames, string outputDir, string baseName)
+        private FlipbookResultInfo GenerateMultiPageSequenceFromFrames(Texture2D[] allFrames, string outputDir, string baseName)
         {
-            if (allFrames.Length == 0) return;
+            var result = new FlipbookResultInfo { ModeName = "MultiPageSequence" };
+            if (allFrames.Length == 0) { result.Success = false; result.Lines.Add("フレームがありません。"); return result; }
 
             // Split into pages
             var fpp = _framesPerPage > 0 ? _framesPerPage : FlipbookPageSplitter.CalculateFramesPerPage(_maxSheetSize);
             var splitResult = FlipbookPageSplitter.Split(allFrames, fpp);
-            if (splitResult == null) return;
+            if (splitResult == null) { result.Success = false; result.Lines.Add("ページ分割に失敗しました。"); return result; }
 
             // 3. Create subfolders
             var sheetsDir    = $"{outputDir}/Sheets";
@@ -921,17 +1089,19 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 var matPath   = $"{materialsDir}/{baseName}_Page{i + 1}_Seq.mat";
 
                 var sheetResult = FlipbookSheetBuilder.Build(page.Frames, sheetPath, _maxSheetSize);
-                if (sheetResult == null) return;
+                if (sheetResult == null) { result.Success = false; result.Lines.Add($"Page {i + 1} のスプライトシート生成に失敗しました。"); return result; }
 
                 var sheetTex = AssetDatabase.LoadAssetAtPath<Texture2D>(sheetResult.SavedPath);
                 if (sheetTex == null)
                 {
                     FlipbookGeneratorLog.Error($"Failed to load sheet: {sheetResult.SavedPath}");
-                    return;
+                    result.Success = false;
+                    result.Lines.Add($"Page {i + 1} のスプライトシート読み込みに失敗しました。");
+                    return result;
                 }
 
                 var mat = FlipbookMaterialBuilder.BuildForSequence(sheetResult, sheetTex, matPath);
-                if (mat == null) return;
+                if (mat == null) { result.Success = false; result.Lines.Add($"Page {i + 1} の Material 生成に失敗しました。"); return result; }
 
                 materials[i] = mat;
             }
@@ -942,81 +1112,132 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             {
                 var page = splitResult.Pages[i];
                 var clipPath = $"{animDir}/{baseName}_Page{i + 1}_Anim.anim";
+                var hasAudio = _enableAudioSource && _audioClip != null;
                 var clip = FlipbookAnimationBuilder.Build(
-                    i, splitResult.PageCount, page.Frames.Length, _fps, clipPath);
-                if (clip == null) return;
+                    i, splitResult.PageCount, page.Frames.Length, _fps, clipPath, hasAudio);
+                if (clip == null) { result.Success = false; result.Lines.Add($"Page {i + 1} の AnimationClip 生成に失敗しました。"); return result; }
                 clips[i] = clip;
             }
 
-            // 6. AnimatorController
+            // 6. Reset clip (Audio restart on manual reset)
+            AnimationClip resetClip = null;
+            if (_enableAudioSource && _audioClip != null && splitResult.PageCount > 0)
+            {
+                var resetClipPath = $"{animDir}/{baseName}_ResetPage1_Anim.anim";
+                resetClip = FlipbookAnimationBuilder.BuildResetClip(
+                    splitResult.PageCount, splitResult.Pages[0].Frames.Length, _fps, resetClipPath);
+            }
+
+            // 7. AnimatorController
             var controllerPath = $"{animDir}/{baseName}_Animator.controller";
-            FlipbookGeneratorLog.Info($"AnimatorBuilder: clips.Length = {clips.Length}");
             AnimatorController controller;
             try
             {
-                controller = FlipbookAnimatorBuilder.Build(clips, controllerPath, _playbackMode);
+                controller = FlipbookAnimatorBuilder.Build(clips, controllerPath, resetClip);
             }
             catch (System.Exception e)
             {
                 FlipbookGeneratorLog.Error($"AnimatorBuilder threw: {e}");
-                return;
+                result.Success = false;
+                result.Lines.Add($"AnimatorController の生成中にエラーが発生しました: {e.Message}");
+                return result;
             }
-            if (controller == null) return;
+            if (controller == null) { result.Success = false; result.Lines.Add("AnimatorController の生成に失敗しました。"); return result; }
 
             FlipbookGeneratorLog.Info(
                 $"MultiPageSequence generation complete: {splitResult.TotalFrames} frames -> " +
                 $"{splitResult.PageCount} pages, {controllerPath}");
 
-            // 7. Prefab
-            if (_generatePrefab)
-                FlipbookPrefabBuilder.BuildMultiPage(materials, controller, prefabsDir, baseName, _enableObjectToggle, _toggleName, _enableMergeAnimator, _enableMenu, _enableAudioSource, _audioClip, _playbackMode);
+            var preview = BuildSplitPreview(splitResult.TotalFrames, fpp);
+            result.Lines.Add($"生成完了: {splitResult.TotalFrames} フレーム, FPS: {_fps}");
+            result.Lines.Add($"Pages: {preview}");
+            result.Lines.Add("");
+            result.Lines.Add($"AnimatorController: {Path.GetFileName(controllerPath)}");
 
-            EditorGUIUtility.PingObject(controller);
+            // 8. Prefab
+            string prefabPath = null;
+            if (_generatePrefab)
+                prefabPath = FlipbookPrefabBuilder.BuildMultiPage(materials, controller, prefabsDir, baseName, _enableObjectToggle, _toggleName, _enableMergeAnimator, _enableMenu, _enableAudioSource, _audioClip);
+
+            if (prefabPath != null)
+            {
+                result.Lines.Add($"Prefab: {Path.GetFileName(prefabPath)}");
+                result.PingAssetPath = prefabPath;
+            }
+            else
+            {
+                result.PingAssetPath = controllerPath;
+            }
+
+            AppendSettingsLines(result);
+            return result;
         }
 
-        private void RunDryRunFromVideo()
+        private FlipbookResultInfo RunDryRunFromVideo()
         {
             if (_videoInfo == null)
             {
                 FlipbookGeneratorLog.Error("[Dry Run] 動画情報を取得できません。動画ファイルを再指定してください。");
-                return;
+                return new FlipbookResultInfo { IsDryRun = true, Success = false, Lines = { "動画情報を取得できません。動画ファイルを再指定してください。" } };
             }
 
-            var estimatedFrames = Mathf.RoundToInt(_videoInfo.Duration * _fps);
+            var effectiveDuration = _enableTrim && _trimDuration > 0f ? _trimDuration : _videoInfo.Duration;
+            var estimatedFrames = Mathf.RoundToInt(effectiveDuration * _fps);
             if (estimatedFrames <= 0)
             {
                 FlipbookGeneratorLog.Error("[Dry Run] 推定フレーム数が 0 です。FPS または動画を確認してください。");
-                return;
+                return new FlipbookResultInfo { IsDryRun = true, Success = false, Lines = { "推定フレーム数が 0 です。FPS または動画を確認してください。" } };
             }
 
+            var trimInfo = _enableTrim && _trimDuration > 0f
+                ? $", トリミング: {_trimStart:F1}秒〜{_trimStart + _trimDuration:F1}秒"
+                : "";
             FlipbookGeneratorLog.Info(
-                $"[Dry Run] 入力: 動画 ({_videoInfo.Width}x{_videoInfo.Height}, {_videoInfo.Duration:F1}秒), " +
+                $"[Dry Run] 入力: 動画 ({_videoInfo.Width}x{_videoInfo.Height}, {_videoInfo.Duration:F1}秒{trimInfo}), " +
                 $"書き出し {_fps:F1}fps, 最大解像度 {_extractMaxResolution}px → 推定 {estimatedFrames} フレーム");
 
+            if (_outputMode != OutputMode.MultiPageSequence)
+            {
+                var maxFrames = FlipbookSheetBuilder.CalculateMaxFrames(_maxSheetSize);
+                if (estimatedFrames > maxFrames)
+                    FlipbookGeneratorLog.Warn(
+                        $"[Dry Run] 推定フレーム数 ({estimatedFrames}) が収容上限 ({maxFrames}) を超えています。" +
+                        "MultiPageSequence モードの使用を検討してください。");
+            }
+
+            FlipbookResultInfo result;
             switch (_outputMode)
             {
                 case OutputMode.Texture2DArray:
-                    RunDryRunArray(estimatedFrames);
+                    result = RunDryRunArray(estimatedFrames);
                     break;
                 case OutputMode.LilToon:
-                    RunDryRunLilToon(estimatedFrames);
+                    result = RunDryRunLilToon(estimatedFrames);
                     break;
                 case OutputMode.MultiPageSequence:
-                    RunDryRunMultiPage(estimatedFrames);
+                    result = RunDryRunMultiPage(estimatedFrames);
                     break;
                 default:
-                    RunDryRunSheet(estimatedFrames);
-                    break;
+                    return null;
             }
+
+            // Prepend video input info
+            var videoLine = $"入力: 動画 ({_videoInfo.Width}x{_videoInfo.Height}, {_videoInfo.Duration:F1}秒{trimInfo})";
+            var extractLine = $"書き出し {_fps:F1}fps, 最大解像度 {_extractMaxResolution}px → 推定 {estimatedFrames} フレーム";
+            result.Lines.Insert(0, videoLine);
+            result.Lines.Insert(1, extractLine);
+            return result;
         }
 
-        private void RunGenerateFromVideo()
+        private FlipbookResultInfo RunGenerateFromVideo()
         {
             var assetPath = AssetDatabase.GetAssetPath(_videoFile);
             var fullPath = Path.GetFullPath(assetPath);
 
-            var frames = FlipbookVideoConverter.ExtractFrames(fullPath, _fps, _extractMaxResolution);
-            if (frames.Length == 0) return;
+            var trimStart = _enableTrim ? _trimStart : 0f;
+            var trimDuration = _enableTrim ? _trimDuration : 0f;
+            var frames = FlipbookVideoConverter.ExtractFrames(fullPath, _fps, _extractMaxResolution, trimStart, trimDuration);
+            if (frames.Length == 0) return null;
 
             try
             {
@@ -1026,23 +1247,25 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                     ClearSlotContents(outputDir);
                 var baseName = _outputName;
 
+                FlipbookResultInfo result;
                 switch (_outputMode)
                 {
                     case OutputMode.Texture2DArray:
-                        GenerateArray(frames, outputDir, baseName);
+                        result = GenerateArray(frames, outputDir, baseName);
                         break;
                     case OutputMode.LilToon:
-                        GenerateLilToon(frames, outputDir, baseName);
+                        result = GenerateLilToon(frames, outputDir, baseName);
                         break;
                     case OutputMode.MultiPageSequence:
-                        GenerateMultiPageSequenceFromFrames(frames, outputDir, baseName);
+                        result = GenerateMultiPageSequenceFromFrames(frames, outputDir, baseName);
                         break;
                     default:
-                        GenerateSheet(frames, outputDir, baseName);
+                        result = null;
                         break;
                 }
 
                 RefreshSlotList();
+                return result;
             }
             finally
             {
@@ -1054,14 +1277,25 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
         private static string BuildSplitPreview(int totalFrames, int framesPerPage)
         {
             var pageCount = Mathf.CeilToInt((float)totalFrames / framesPerPage);
-            var parts = new string[pageCount];
+            var frameCounts = new int[pageCount];
             for (var i = 0; i < pageCount; i++)
+                frameCounts[i] = Mathf.Min(framesPerPage, totalFrames - i * framesPerPage);
+            return $"{pageCount} ページ ({CompressSplitPreview(frameCounts)})";
+        }
+
+        private static string CompressSplitPreview(int[] frameCounts)
+        {
+            var parts = new List<string>();
+            var i = 0;
+            while (i < frameCounts.Length)
             {
-                var start = i * framesPerPage;
-                var count = Mathf.Min(framesPerPage, totalFrames - start);
-                parts[i] = $"{count}f";
+                var val = frameCounts[i];
+                var run = 1;
+                while (i + run < frameCounts.Length && frameCounts[i + run] == val) run++;
+                parts.Add(run > 1 ? $"{val}f\u00d7{run}" : $"{val}f");
+                i += run;
             }
-            return $"{pageCount} ページ ({string.Join(" + ", parts)})";
+            return string.Join(" + ", parts);
         }
 
         private const string GeneratedFolderName = "Generated_Flipbook";
@@ -1206,18 +1440,24 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
         private static void ClearSlotContents(string slotDir)
         {
-            // Delete subfolders first
+            // Delete subfolders first (preserve Audio/)
             foreach (var sub in AssetDatabase.GetSubFolders(slotDir))
+            {
+                if (Path.GetFileName(sub) == FlipbookConstants.AudioObjectName) continue;
                 AssetDatabase.DeleteAsset(sub);
+            }
 
-            // Delete remaining files directly under slot folder
+            // Delete remaining files directly under slot folder (preserve Audio/)
             var guids = AssetDatabase.FindAssets("", new[] { slotDir });
             foreach (var guid in guids)
             {
                 var path = AssetDatabase.GUIDToAssetPath(guid);
                 var parent = Path.GetDirectoryName(path)?.Replace('\\', '/');
                 if (parent == slotDir)
+                {
+                    if (Path.GetFileName(path) == FlipbookConstants.AudioObjectName) continue;
                     AssetDatabase.DeleteAsset(path);
+                }
             }
         }
 
@@ -1251,6 +1491,12 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 return;
             }
 
+            if (_enableTrim)
+            {
+                var trimStyle = new GUIStyle(EditorStyles.miniLabel) { normal = { textColor = Color.gray } };
+                EditorGUILayout.LabelField("トリミング設定が音声にも適用されます", trimStyle);
+            }
+
             if (GUILayout.Button("動画から音声を抽出", GUILayout.ExpandWidth(false)))
             {
                 var videoFullPath = Path.GetFullPath(videoAssetPath);
@@ -1263,7 +1509,9 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 var audioDir = $"{slotDir}/Audio";
                 EnsureFolderExists(audioDir);
 
-                var clip = FlipbookVideoConverter.ExtractAudio(videoFullPath, audioDir, _outputName);
+                var audioTrimStart = _enableTrim ? _trimStart : 0f;
+                var audioTrimDuration = _enableTrim ? _trimDuration : 0f;
+                var clip = FlipbookVideoConverter.ExtractAudio(videoFullPath, audioDir, _outputName, audioTrimStart, audioTrimDuration);
                 if (clip != null)
                 {
                     _audioClip = clip;

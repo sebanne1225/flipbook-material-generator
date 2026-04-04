@@ -25,12 +25,13 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 .FirstOrDefault(t => t != null);
         }
 
-        internal static void Build(Material material, string outputFolderPath, string baseName,
+        internal static string Build(Material material, string outputFolderPath, string baseName,
             bool enableObjectToggle = false, string toggleName = "Flipbook",
             bool enableMenu = true,
             bool enableAudioSource = false, AudioClip audioClip = null)
         {
             var prefabName = $"{baseName}_Flipbook";
+            var prefabPath = $"{outputFolderPath}/{prefabName}.prefab";
             var root = new GameObject(prefabName);
 
             try
@@ -64,7 +65,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
                 // MA optional integration
                 if (enableObjectToggle)
-                    TryAttachObjectToggleAndMenuItem(root, quad, toggleName, PlaybackMode.Loop, enableMenu, audioObj);
+                    TryAttachObjectToggleAndMenuItem(root, quad, toggleName, enableMenu, audioObj);
 
                 // Ensure child order: [MA Menu(0)] → [Audio(1)] → Quad
                 if (audioObj != null)
@@ -72,11 +73,11 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 quad.transform.SetSiblingIndex(audioObj != null ? 2 : 1);
 
                 // Save prefab
-                var prefabPath = $"{outputFolderPath}/{prefabName}.prefab";
                 PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
                 AssetDatabase.ImportAsset(prefabPath, ImportAssetOptions.ForceUpdate);
 
                 FlipbookGeneratorLog.Info($"Prefab saved: {prefabPath}");
+                return prefabPath;
             }
             finally
             {
@@ -84,7 +85,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             }
         }
 
-        internal static void BuildMultiPage(
+        internal static string BuildMultiPage(
             Material[] materials,
             AnimatorController controller,
             string outputFolderPath,
@@ -94,10 +95,10 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             bool enableMergeAnimator = true,
             bool enableMenu = true,
             bool enableAudioSource = false,
-            AudioClip audioClip = null,
-            PlaybackMode playbackMode = PlaybackMode.Loop)
+            AudioClip audioClip = null)
         {
             var prefabName = $"{baseName}_FlipbookMultiPage";
+            var prefabPath = $"{outputFolderPath}/{prefabName}.prefab";
             var root = new GameObject(prefabName);
 
             try
@@ -145,7 +146,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
                 // MA optional integration
                 if (enableObjectToggle)
-                    TryAttachObjectToggleAndMenuItem(root, pagesObj, toggleName, playbackMode, enableMenu, audioObj);
+                    TryAttachObjectToggleAndMenuItem(root, pagesObj, toggleName, enableMenu, null, isMultiPage: true);
                 else if (enableMergeAnimator)
                     TryAttachModularAvatar(root);
                 if (enableMergeAnimator)
@@ -157,11 +158,11 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 pagesObj.transform.SetSiblingIndex(audioObj != null ? 2 : 1);
 
                 // Save prefab
-                var prefabPath = $"{outputFolderPath}/{prefabName}.prefab";
                 PrefabUtility.SaveAsPrefabAsset(root, prefabPath);
                 AssetDatabase.ImportAsset(prefabPath, ImportAssetOptions.ForceUpdate);
 
                 FlipbookGeneratorLog.Info($"MultiPage Prefab saved: {prefabPath}");
+                return prefabPath;
             }
             finally
             {
@@ -169,7 +170,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             }
         }
 
-        private static void TryAttachObjectToggleAndMenuItem(GameObject root, GameObject toggleTarget, string toggleName, PlaybackMode playbackMode, bool enableMenu = true, GameObject audioObj = null)
+        private static void TryAttachObjectToggleAndMenuItem(GameObject root, GameObject toggleTarget, string toggleName, bool enableMenu = true, GameObject audioObj = null, bool isMultiPage = false)
         {
             var objectToggleType = FindType(MAObjectToggleTypeName);
             var menuItemType = FindType(MAMenuItemTypeName);
@@ -236,7 +237,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                     if (paramField != null)
                     {
                         var paramInst = Activator.CreateInstance(paramField.FieldType);
-                        paramField.FieldType.GetField("name", flags)?.SetValue(paramInst, FlipbookConstants.ToggleParameterName);
+                        paramField.FieldType.GetField("name", flags)?.SetValue(paramInst, FlipbookConstants.EnabledParameterName);
                         paramField.SetValue(control, paramInst);
                     }
                     controlField.SetValue(menuItemComp, control);
@@ -244,33 +245,61 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 menuItemType.GetField("label", flags)?.SetValue(menuItemComp, toggleName);
                 menuItemType.GetField("isDefault", flags)?.SetValue(menuItemComp, false); // default OFF
 
-                // ManualReset: Reset child with Button MenuItem
-                if (playbackMode == PlaybackMode.ManualReset)
+                // Loop / Reset children: MultiPageSequence only (3-mode has no AnimatorController)
+                if (isMultiPage)
                 {
-                    var resetObj = new GameObject("Reset");
-                    resetObj.transform.SetParent(maMenu.transform, false);
-                    var resetMenuItemComp = resetObj.AddComponent(menuItemType);
-                    var resetControlField = menuItemType.GetField("Control", flags);
-                    if (resetControlField != null)
+                // Loop child: Toggle MenuItem (FlipbookLoop, default ON)
+                var loopObj = new GameObject("Loop");
+                loopObj.transform.SetParent(maMenu.transform, false);
+                var loopMenuItemComp = loopObj.AddComponent(menuItemType);
+                var loopControlField = menuItemType.GetField("Control", flags);
+                if (loopControlField != null)
+                {
+                    var control = loopControlField.GetValue(loopMenuItemComp);
+                    if (control == null)
+                        control = Activator.CreateInstance(loopControlField.FieldType);
+                    var typeField = loopControlField.FieldType.GetField("type", flags);
+                    if (typeField != null)
+                        typeField.SetValue(control, Enum.Parse(typeField.FieldType, "Toggle"));
+                    var valueField = loopControlField.FieldType.GetField("value", flags);
+                    valueField?.SetValue(control, 1f);
+                    var paramField = loopControlField.FieldType.GetField("parameter", flags);
+                    if (paramField != null)
                     {
-                        var control = resetControlField.GetValue(resetMenuItemComp);
-                        if (control == null)
-                            control = Activator.CreateInstance(resetControlField.FieldType);
-                        var typeField = resetControlField.FieldType.GetField("type", flags);
-                        if (typeField != null)
-                            typeField.SetValue(control, Enum.Parse(typeField.FieldType, "Button"));
-                        var valueField = resetControlField.FieldType.GetField("value", flags);
-                        valueField?.SetValue(control, 1f);
-                        var paramField = resetControlField.FieldType.GetField("parameter", flags);
-                        if (paramField != null)
-                        {
-                            var paramInst = Activator.CreateInstance(paramField.FieldType);
-                            paramField.FieldType.GetField("name", flags)?.SetValue(paramInst, FlipbookConstants.ResetParameterName);
-                            paramField.SetValue(control, paramInst);
-                        }
-                        resetControlField.SetValue(resetMenuItemComp, control);
+                        var paramInst = Activator.CreateInstance(paramField.FieldType);
+                        paramField.FieldType.GetField("name", flags)?.SetValue(paramInst, FlipbookConstants.LoopParameterName);
+                        paramField.SetValue(control, paramInst);
                     }
-                    menuItemType.GetField("label", flags)?.SetValue(resetMenuItemComp, "Reset");
+                    loopControlField.SetValue(loopMenuItemComp, control);
+                }
+                menuItemType.GetField("label", flags)?.SetValue(loopMenuItemComp, "Loop");
+                menuItemType.GetField("isDefault", flags)?.SetValue(loopMenuItemComp, true); // default ON
+
+                // Reset child: Button MenuItem (FlipbookReset)
+                var resetObj = new GameObject("Reset");
+                resetObj.transform.SetParent(maMenu.transform, false);
+                var resetMenuItemComp = resetObj.AddComponent(menuItemType);
+                var resetControlField = menuItemType.GetField("Control", flags);
+                if (resetControlField != null)
+                {
+                    var control = resetControlField.GetValue(resetMenuItemComp);
+                    if (control == null)
+                        control = Activator.CreateInstance(resetControlField.FieldType);
+                    var typeField = resetControlField.FieldType.GetField("type", flags);
+                    if (typeField != null)
+                        typeField.SetValue(control, Enum.Parse(typeField.FieldType, "Button"));
+                    var valueField = resetControlField.FieldType.GetField("value", flags);
+                    valueField?.SetValue(control, 1f);
+                    var paramField = resetControlField.FieldType.GetField("parameter", flags);
+                    if (paramField != null)
+                    {
+                        var paramInst = Activator.CreateInstance(paramField.FieldType);
+                        paramField.FieldType.GetField("name", flags)?.SetValue(paramInst, FlipbookConstants.ResetParameterName);
+                        paramField.SetValue(control, paramInst);
+                    }
+                    resetControlField.SetValue(resetMenuItemComp, control);
+                }
+                menuItemType.GetField("label", flags)?.SetValue(resetMenuItemComp, "Reset");
                 }
                 }
                 catch (ArgumentException e)
@@ -308,7 +337,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 elemType.GetField("Active", flags)?.SetValue(toggledObj, true);
                 listType.GetMethod("Add")?.Invoke(objects, new[] { toggledObj });
 
-                // Audio object → Active=true (optional)
+                // Audio object (3-mode only; MultiPageSequence passes null — animation layer controls m_IsActive)
                 if (audioObj != null && objRefType != null)
                 {
                     var audioToggled = Activator.CreateInstance(elemType);
