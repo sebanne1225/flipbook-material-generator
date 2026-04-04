@@ -1,0 +1,27 @@
+Flipbook Material Generator
+最短の使い方
+
+1. Unity の上部メニューから次を開きます
+   Tools/Sebanne/Flipbook Material Generator
+
+2. 入力設定で動画ファイルまたは PNG 連番フォルダを指定します
+
+3. FPS を設定します（動画入力の場合はトリミングも可能）
+
+4. 出力モードを選びます
+   - MultiPageSequence（おすすめ）: フレーム数制限なし、音声同期対応
+   - Texture2DArray: 軽量、短いループ向け
+   - LilToon: lilToon 環境ならシェーダー追加なし
+
+5. まず Dry Run を押してください
+   生成予定の内容をダイアログで確認できます。
+
+6. 問題がなければ Generate を押します
+   スプライトシート、マテリアル、Prefab が生成されます。
+
+注意:
+- 初回は Dry Run を先に行うのがおすすめです
+- 動画入力には FFmpeg のインストールが必要です
+- Modular Avatar (MA) は optional です（未導入でも Prefab 生成は可能）
+- 元アバターには直接変更を加えません
+- 詳しい設定や制限事項は README を確認してください

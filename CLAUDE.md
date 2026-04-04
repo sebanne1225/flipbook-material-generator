@@ -38,21 +38,29 @@
 - AnimatorController レイヤー名: "Flipbook"
 
 ### UI
-- FPS 補助計算 UI（分秒入力・Input Folder から自動カウント）
-- 最大シートサイズ選択（512/1024/2048/4096、デフォルト 2048、上級設定折りたたみ内）
-- プリセット UI（おすすめ / カスタム）全モード対応。セクション名「Prefab / MA 設定」に統一。モード切替時に「おすすめ」にリセット
-- MergeAnimator OFF 時の値リセット + 警告 HelpBox
-- 出力名テキストフィールド（入力ソースから自動設定）+ スロットドロップダウン
+- 5セクション構成（入力設定・出力設定・Prefab/MA設定・実行・上級設定）、helpBox 枠で Skinned Mesh Mirror 式ブロック分け
+- セクション見出しは DrawSectionHeader（boldLabel + miniLabel 補助文）
+- DrawSubInfo ヘルパーで情報表示用 miniLabel を共通化
+- FPS・トリミングは入力設定セクション内、MPS 分割プレビューはフレーム推定の直後
+- 出力モード Popup 直下に Info HelpBox でモード説明（再生方式・重さ・用途・制約）
+- 出力先パスは Skinned Mesh Mirror 式（「現在の出力先」ラベル + 完全パス + 補助文）
+- スロット一覧はスロット選択の直下（Foldout）
+- 入力不足案内は Dry Run / Generate ボタンの上
+- 上級設定は最下部 Foldout
+- OnGUI 全体を ScrollView で囲む
+- HelpBox は警告・エラー専用。説明・情報表示は DrawSubInfo（miniLabel）
+- ラベルはツール概念語を日本語化済み（出力モード、入力フォルダ、出力フォルダ、PNG連番 FPS）
+- コンポーネント固有名（MA, Prefab, AudioClip 等）は英語のまま
+- プリセット UI（おすすめ / カスタム）全3モード対応
+- FPS 補助計算 UI（分秒入力・入力フォルダから自動カウント）
 - domain reload 対応済み（SerializeField + _videoInfo re-probe）
 - enableMenu=false 時は MA Menu を生成せず ObjectToggle を root に直接アタッチ
-- 結果ダイアログ: Dry Run / Generate 完了後に EditorUtility.DisplayDialog で表示。三分割（入力情報 / シート・生成情報 / MA 設定）。ページ構成は圧縮表示（64f×17 + 48f）
-- Generate 完了時に Prefab を Ping（未生成時は Material / Controller）
-- コンソールログ制御: FlipbookGeneratorLog.Enabled ゲート。上級設定内「コンソールにログを出力」トグル（デフォルト OFF）。Error は常時出力
 
 ### アセット上書き
+- 削除は全箇所 FlipbookFileUtility 経由（File.Delete + .meta 削除、ゴミ箱を経由しない完全削除）
 - Material: CopyPropertiesFromMaterial で GUID 保持
-- Texture2DArray / AnimationClip: DeleteAsset → Refresh → CreateAsset
-- AnimatorController: DeleteAsset → CreateAnimatorControllerAtPath
+- Texture2DArray / AnimationClip: 完全削除 → Refresh → CreateAsset
+- AnimatorController: 完全削除 → Refresh → CreateAnimatorControllerAtPath
 - PNG: File.WriteAllBytes（.meta 保持で GUID 不変）
 
 ### その他
@@ -114,7 +122,7 @@
 ## ファイル構成
 
 ### Editor (namespace: Sebanne.FlipbookMaterialGenerator.Editor)
-- `Editor/FlipbookMaterialGeneratorWindow.cs` — メインウィンドウ（`Tools/Sebanne/Flipbook Material Generator`）。入力モード切り替え（動画ファイル / PNG連番フォルダ）、出力先モード、スロット方式出力管理、FPS 設定、Prefab生成、Dry Run / Generate ボタン。
+- `Editor/FlipbookMaterialGeneratorWindow.cs` — メインウィンドウ。5セクション構成（入力設定・出力設定・Prefab/MA設定・実行・上級設定）。ScrollView + helpBox 枠。DrawSectionHeader / DrawSubInfo / DrawOutputPathPreview ヘルパー。
 - `Editor/Core/FlipbookConstants.cs` — パス文字列・オブジェクト名・Animatorパラメータ名・シェーダープロパティ名の定数定義。
 - `Editor/Core/FlipbookVideoConverter.cs` — FFmpeg 動画入力。IsFFmpegAvailable / Probe(ffprobe、音声トラック検出含む) / ExtractFrames(PNG抽出→Texture2D[]、ハッシュベースキャッシュ対応) / ExtractAudio(WAV抽出→AudioClip、キャッシュキー照合対応)。
 - `Editor/Core/FlipbookFrameLoader.cs` — PNG 連番読み込み。AssetDatabase 経由、上限なし（LoadAll）。読み込み失敗フレームはスキップ続行（Warn ログ）。Generated_Flipbook 除外フィルタ付き。
@@ -125,6 +133,7 @@
 - `Editor/Core/FlipbookAnimationBuilder.cs` — MultiPageSequence 用。各ページのAnimationClipを生成。
 - `Editor/Core/FlipbookAnimatorBuilder.cs` — MultiPageSequence 用。AnimatorControllerを生成（Idle + Page + ResetPage1 ステート、FlipbookEnabled / FlipbookLoop / FlipbookReset パラメータ）。
 - `Editor/Core/FlipbookResultInfo.cs` — 結果ダイアログ用データクラス（IsDryRun / Success / ModeName / Lines / PingAssetPath）。
+- `Editor/Core/FlipbookFileUtility.cs` — ファイル/フォルダ削除ユーティリティ。DeleteFileAndMeta / DeleteFolderAndMeta。File.Delete ベース（ゴミ箱を経由しない完全削除）。
 - `Editor/Diagnostics/FlipbookGeneratorLog.cs` — ログユーティリティ。prefix `[FlipbookMaterialGenerator]`。Enabled ゲート付き（Info/Warn のみ、Error は常時出力）。
 
 ### Runtime
@@ -148,8 +157,8 @@
 - Editor-only ファイルの namespace は `Sebanne.FlipbookMaterialGenerator.Editor` に統一する。
 
 ## 次フェーズ候補（後回し）
-- OffReset モード（Object Toggle OFF で frame0 へ戻る）（改善）
-  ※ VRC 対応には bool パラメータ + Idle ステート +
-  MA パラメータドライバー連携が必要。実装コストが高いため次フェーズ
-- UI 説明文整備（AudioClip 未指定警告・音源リセット HelpBox 含む）
+- AudioClip 未指定警告（音源追加 ON + AudioClip null で Generate 時に警告が出ない）
+- Texture2DArray clamp=64 と CalculateMaxFrames のズレ整理（安全側、実害なし）
+- FPS 計算機の折りたたみ化（PNG モード時に目立ちすぎ）
 - lilToon プロパティ名ハードコード（バージョンアップ時に手動確認の運用）
+- おすすめプリセットの設定値を詰める（UI改善）

@@ -1,9 +1,13 @@
 {
   "name": "com.sebanne.flipbook-material-generator",
   "displayName": "Flipbook Material Generator",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "unity": "2022.3",
-  "description": "An Editor tool that generates sprite sheets and flipbook materials from PNG image sequences.",
+  "description": "動画ファイルまたは PNG 連番から、VRChat 向けのフリップブックアニメーション素材を自動生成する Unity Editor ツールです。",
+  "documentationUrl": "https://github.com/sebanne1225/flipbook-material-generator/blob/master/README.md",
+  "changelogUrl": "https://github.com/sebanne1225/flipbook-material-generator/blob/master/CHANGELOG.md",
+  "licensesUrl": "https://github.com/sebanne1225/flipbook-material-generator/blob/master/LICENSE",
+  "url": "https://github.com/sebanne1225/flipbook-material-generator",
   "author": {
     "name": "sebanne"
   }
