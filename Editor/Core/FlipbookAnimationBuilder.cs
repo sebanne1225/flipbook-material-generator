@@ -59,7 +59,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
             if (AssetDatabase.LoadAssetAtPath<AnimationClip>(outputPath) != null)
             {
-                AssetDatabase.DeleteAsset(outputPath);
+                FlipbookFileUtility.DeleteFileAndMeta(outputPath);
                 AssetDatabase.Refresh();
             }
             AssetDatabase.CreateAsset(clip, outputPath);
@@ -122,7 +122,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
             if (AssetDatabase.LoadAssetAtPath<AnimationClip>(outputPath) != null)
             {
-                AssetDatabase.DeleteAsset(outputPath);
+                FlipbookFileUtility.DeleteFileAndMeta(outputPath);
                 AssetDatabase.Refresh();
             }
             AssetDatabase.CreateAsset(clip, outputPath);

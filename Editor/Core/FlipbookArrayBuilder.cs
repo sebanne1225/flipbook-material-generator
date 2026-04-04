@@ -57,7 +57,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
             if (AssetDatabase.LoadAssetAtPath<Texture2DArray>(outputPath) != null)
             {
-                AssetDatabase.DeleteAsset(outputPath);
+                FlipbookFileUtility.DeleteFileAndMeta(outputPath);
                 AssetDatabase.Refresh();
             }
             AssetDatabase.CreateAsset(texArray, outputPath);

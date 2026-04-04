@@ -207,7 +207,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             // Remove existing WAV files in Audio/ to prevent accumulation
             var existingWavs = AssetDatabase.FindAssets("t:AudioClip", new[] { outputAssetDir });
             foreach (var guid in existingWavs)
-                AssetDatabase.DeleteAsset(AssetDatabase.GUIDToAssetPath(guid));
+                FlipbookFileUtility.DeleteFileAndMeta(AssetDatabase.GUIDToAssetPath(guid));
 
             try
             {
@@ -240,6 +240,13 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 File.WriteAllText(cacheKeyPath, cacheKey);
 
                 AssetDatabase.ImportAsset(wavAssetPath, ImportAssetOptions.ForceUpdate);
+
+                if (AssetImporter.GetAtPath(wavAssetPath) is AudioImporter audioImporter)
+                {
+                    audioImporter.loadInBackground = true;
+                    audioImporter.SaveAndReimport();
+                }
+
                 var clip = AssetDatabase.LoadAssetAtPath<AudioClip>(wavAssetPath);
                 if (clip == null)
                 {

@@ -50,7 +50,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
         [SerializeField] private bool _showAdvanced = false;
         [SerializeField] private bool _enableConsoleLog;
         [SerializeField] private float _fps = 8f;
-        [SerializeField] private bool _generatePrefab;
+        [SerializeField] private bool _generatePrefab = true;
         [SerializeField] private string _toggleName = "Flipbook";
 
         private enum FlipbookPreset { Recommended, Custom }
@@ -74,6 +74,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
         // Slot browser
         [SerializeField] private bool _showSlotBrowser;
         private SlotSummary[] _slotSummaries = Array.Empty<SlotSummary>(); // non-serializable, rebuilt on demand
+
+        [SerializeField] private Vector2 _scrollPosition;
 
         private sealed class SlotSummary
         {
@@ -160,13 +162,18 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
         private void OnGUI()
         {
+            _scrollPosition = EditorGUILayout.BeginScrollView(_scrollPosition);
+
             EditorGUILayout.Space();
             EditorGUILayout.LabelField(WindowTitle, EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
                 "動画ファイルまたはPNG連番フォルダからスプライトシートとフリップブックマテリアルを生成します。",
                 MessageType.Info);
 
-            EditorGUILayout.Space();
+            // === 入力設定 ===
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+            DrawSectionHeader("入力設定", "動画ファイルまたは PNG 連番フォルダと FPS を設定します。");
 
             // Input mode
             var inputModeLabels = new GUIContent[]
@@ -232,167 +239,12 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             {
                 EditorGUI.BeginChangeCheck();
                 _inputFolder = (DefaultAsset)EditorGUILayout.ObjectField(
-                    "Input Folder", _inputFolder, typeof(DefaultAsset), false);
+                    "入力フォルダ", _inputFolder, typeof(DefaultAsset), false);
                 if (EditorGUI.EndChangeCheck() && _inputFolder != null && string.IsNullOrWhiteSpace(_outputName))
                 {
                     var folderPath = AssetDatabase.GetAssetPath(_inputFolder);
                     _outputName = Path.GetFileName(folderPath);
                 }
-            }
-
-            // Output folder mode
-            var folderModeLabels = new GUIContent[]
-            {
-                new GUIContent("元ソース直下"),
-                new GUIContent("ツール共通フォルダ"),
-                new GUIContent("フォルダを指定"),
-            };
-            EditorGUI.BeginChangeCheck();
-            _outputFolderMode = (OutputFolderMode)EditorGUILayout.Popup(
-                new GUIContent("出力先"),
-                (int)_outputFolderMode,
-                folderModeLabels);
-            if (EditorGUI.EndChangeCheck())
-                RefreshSlotList();
-
-            if (_outputFolderMode == OutputFolderMode.Custom)
-            {
-                EditorGUI.BeginChangeCheck();
-                _outputFolder = (DefaultAsset)EditorGUILayout.ObjectField(
-                    "Output Folder", _outputFolder, typeof(DefaultAsset), false);
-                if (EditorGUI.EndChangeCheck())
-                    RefreshSlotList();
-            }
-
-            // Output name & slot
-            _outputName = EditorGUILayout.TextField("出力名", _outputName);
-
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                _slotIndex = EditorGUILayout.Popup("スロット", _slotIndex, _slotList);
-                if (GUILayout.Button("更新", GUILayout.Width(40)))
-                    RefreshSlotList();
-            }
-
-            if (_slotIndex > 0 && _slotIndex <= _slotFolderNames.Length)
-            {
-                EditorGUILayout.HelpBox(
-                    $"{_slotFolderNames[_slotIndex - 1]}/ を上書きします",
-                    MessageType.Warning);
-            }
-
-            // Slot path preview
-            if (!string.IsNullOrWhiteSpace(_outputName))
-            {
-                var sourcePathHint = _inputMode == InputMode.VideoFile && _videoFile != null
-                    ? AssetDatabase.GetAssetPath(_videoFile) ?? ""
-                    : AssetPathOrNull(_inputFolder) ?? "";
-                var previewRoot = ResolveGeneratedRoot(sourcePathHint);
-                string previewPath;
-                if (_slotIndex > 0 && _slotIndex <= _slotFolderNames.Length)
-                    previewPath = $"{previewRoot}/{_slotFolderNames[_slotIndex - 1]}/";
-                else
-                    previewPath = $"{previewRoot}/{GetNextSlotNumber(previewRoot):D2}_{_outputName}/";
-                var style = new GUIStyle(EditorStyles.miniLabel) { normal = { textColor = Color.gray } };
-                EditorGUILayout.LabelField($"\u2192 {previewPath}", style);
-            }
-
-            // Output mode
-            var modeLabels = new[] { "Texture2DArray", "LilToon", "MultiPageSequence" };
-            var modeValues = new[] { OutputMode.Texture2DArray, OutputMode.LilToon, OutputMode.MultiPageSequence };
-            var modeIndex = Array.IndexOf(modeValues, _outputMode);
-            if (modeIndex < 0) modeIndex = 2; // fallback: MultiPageSequence
-            var prevOutputMode = _outputMode;
-            modeIndex = EditorGUILayout.Popup("Output Mode", modeIndex, modeLabels);
-            _outputMode = modeValues[modeIndex];
-            if (_outputMode != prevOutputMode)
-            {
-                _preset = FlipbookPreset.Recommended;
-                ApplyPreset(_preset);
-            }
-
-            if (_outputMode == OutputMode.LilToon && !FlipbookMaterialBuilder.IsLilToonAvailable())
-            {
-                EditorGUILayout.HelpBox(
-                    "lilToon がプロジェクトに導入されていません。Texture2DArray モードを使用してください。",
-                    MessageType.Warning);
-            }
-
-            // Advanced settings
-            _showAdvanced = EditorGUILayout.Foldout(_showAdvanced, "上級設定");
-            if (_showAdvanced)
-            {
-                if (_inputMode == InputMode.VideoFile)
-                {
-                    _extractMaxResolution = EditorGUILayout.IntPopup(
-                        new GUIContent("最大解像度"),
-                        _extractMaxResolution,
-                        new[] { new GUIContent("256"), new GUIContent("512"), new GUIContent("1024") },
-                        new[] { 256, 512, 1024 });
-                }
-
-                var sizeLabels = new GUIContent[]
-                {
-                    new GUIContent("512"),
-                    new GUIContent("1024"),
-                    new GUIContent("2048"),
-                    new GUIContent("4096"),
-                };
-                _maxSheetSize = EditorGUILayout.IntPopup(
-                    new GUIContent("最大シートサイズ"),
-                    _maxSheetSize,
-                    sizeLabels,
-                    MaxSheetSizeOptions);
-
-                if (_outputMode == OutputMode.MultiPageSequence)
-                {
-                    _autoSplit = EditorGUILayout.Toggle("自動分割", _autoSplit);
-                    if (_autoSplit)
-                    {
-                        var auto = FlipbookPageSplitter.CalculateFramesPerPage(_maxSheetSize);
-                        if (_framesPerPage <= 0) _framesPerPage = auto;
-                        _framesPerPage = EditorGUILayout.IntField("1ページ最大フレーム数", _framesPerPage);
-                        EditorGUILayout.HelpBox(
-                            $"フレームサイズ 256px / シート上限 {_maxSheetSize}px → 自動算出値: {auto}",
-                            MessageType.None);
-                    }
-                    else
-                    {
-                        _framesPerPage = EditorGUILayout.IntField("1ページ最大フレーム数", _framesPerPage);
-                    }
-                    if (_framesPerPage < 1) _framesPerPage = 1;
-                }
-
-                _enableConsoleLog = EditorGUILayout.Toggle("コンソールにログを出力", _enableConsoleLog);
-            }
-
-            // MultiPageSequence settings
-            if (_outputMode == OutputMode.MultiPageSequence)
-            {
-                EditorGUILayout.Space();
-                EditorGUILayout.LabelField("MultiPageSequence 設定", EditorStyles.boldLabel);
-
-                // Split preview
-                var frameCountForPreview = 0;
-                if (_inputMode == InputMode.VideoFile && _videoInfo != null)
-                {
-                    var effectiveDuration = _enableTrim && _trimDuration > 0f ? _trimDuration : _videoInfo.Duration;
-                    frameCountForPreview = Mathf.RoundToInt(effectiveDuration * _fps);
-                }
-                else
-                {
-                    var previewPath = AssetPathOrNull(_inputFolder);
-                    if (previewPath != null && AssetDatabase.IsValidFolder(previewPath))
-                        frameCountForPreview = CountPngFiles(previewPath);
-                }
-
-                if (frameCountForPreview > 0)
-                {
-                    var effectiveFpp = _framesPerPage > 0 ? _framesPerPage : FlipbookPageSplitter.CalculateFramesPerPage(_maxSheetSize);
-                    var preview = BuildSplitPreview(frameCountForPreview, effectiveFpp);
-                    EditorGUILayout.HelpBox(preview, MessageType.Info);
-                }
-
             }
 
             // FPS
@@ -421,14 +273,6 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                     _trimDuration = EditorGUILayout.FloatField("長さ（秒）", _trimDuration);
                     if (_trimDuration < 0f) _trimDuration = 0f;
 
-                    if (_trimDuration > 0f)
-                    {
-                        var trimFrames = Mathf.RoundToInt(_trimDuration * _fps);
-                        EditorGUILayout.HelpBox(
-                            $"トリミング後: {_trimDuration:F1}秒 × {_fps:F1}fps = 推定 {trimFrames} フレーム",
-                            MessageType.Info);
-                    }
-
                     if (_videoInfo != null && _trimStart + _trimDuration > _videoInfo.Duration && _trimDuration > 0f)
                     {
                         EditorGUILayout.HelpBox(
@@ -437,16 +281,18 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                     }
                     EditorGUI.indentLevel--;
                 }
+
+                if (_enableTrim && _trimDuration > 0f)
+                {
+                    var trimFrames = Mathf.RoundToInt(_trimDuration * _fps);
+                    DrawSubInfo($"トリミング後: {_trimDuration:F1}秒 × {_fps:F1}fps → 推定 {trimFrames} フレーム");
+                }
             }
             else
             {
-                _fps = EditorGUILayout.FloatField("PNG Sequence FPS", _fps);
+                _fps = EditorGUILayout.FloatField("PNG連番 FPS", _fps);
                 if (_fps < 0.1f) _fps = 0.1f;
-                EditorGUILayout.HelpBox(
-                    "映像のFPSではなく、PNG書き出し時のFPSを入力してください。\n" +
-                    "・PNG枚数と動画秒数を入力するとFPSを自動計算できます\n" +
-                    "・「Input Folderから取得」でInput Folder内のPNG枚数を自動入力できます",
-                    MessageType.None);
+                DrawSubInfo("PNG 書き出し時の FPS を入力してください。下の計算機でも算出できます。");
 
                 // FPS helper
                 using (new EditorGUILayout.HorizontalScope())
@@ -455,7 +301,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                     var calcInputPath = AssetPathOrNull(_inputFolder);
                     if (calcInputPath != null && AssetDatabase.IsValidFolder(calcInputPath))
                     {
-                        if (GUILayout.Button("Input Folderから取得", GUILayout.ExpandWidth(false)))
+                        if (GUILayout.Button("入力フォルダから取得", GUILayout.ExpandWidth(false)))
                             _fpsCalcFrameCount = CountPngFiles(calcInputPath);
                     }
                 }
@@ -475,218 +321,115 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 }
             }
 
-            // Prefab generation
-            _generatePrefab = EditorGUILayout.Toggle("Prefab も生成する", _generatePrefab);
-
-            if (_generatePrefab && _outputMode == OutputMode.MultiPageSequence)
+            // MultiPageSequence split preview
+            if (_outputMode == OutputMode.MultiPageSequence)
             {
-                EditorGUILayout.Space();
-                EditorGUILayout.LabelField("Prefab / MA 設定", EditorStyles.boldLabel);
-
-                // Preset toolbar
-                var presetLabels = new[] { "おすすめ", "カスタム" };
-                EditorGUI.BeginChangeCheck();
-                var newPreset = (FlipbookPreset)GUILayout.Toolbar((int)_preset, presetLabels);
-                if (EditorGUI.EndChangeCheck() && newPreset != _preset)
-                {
-                    _preset = newPreset;
-                    ApplyPreset(_preset);
-                }
-
-                EditorGUI.indentLevel++;
-
-                // Individual settings (always visible)
-                EditorGUI.BeginChangeCheck();
-
-                _enableMergeAnimator = EditorGUILayout.Toggle("MA Merge Animator", _enableMergeAnimator);
-
-                if (!_enableMergeAnimator)
-                {
-                    _enableObjectToggle = false;
-                    _enableMenu = false;
-                    EditorGUILayout.HelpBox(
-                        "MA Merge Animator が OFF の場合、AnimatorController はアバターの FX レイヤーに統合されません。\n" +
-                        "VRChat アバターで使う場合は ON にしてください。",
-                        MessageType.Warning);
-                }
-
-                if (_enableMergeAnimator)
-                    _enableObjectToggle = EditorGUILayout.Toggle("MA Object Toggle", _enableObjectToggle);
-
-                if (_enableObjectToggle && _enableMergeAnimator)
-                {
-                    using (new EditorGUILayout.HorizontalScope())
-                    {
-                        _toggleName = EditorGUILayout.TextField("トグル名", _toggleName);
-                        var toggleFolderPath = AssetPathOrNull(_inputFolder);
-                        if (toggleFolderPath != null && AssetDatabase.IsValidFolder(toggleFolderPath))
-                        {
-                            if (GUILayout.Button("Input Folderから取得", GUILayout.ExpandWidth(false)))
-                                _toggleName = Path.GetFileName(toggleFolderPath);
-                        }
-                    }
-
-                    _enableAudioSource = EditorGUILayout.Toggle("音源を追加", _enableAudioSource);
-                    if (_enableAudioSource)
-                    {
-                        _audioClip = (AudioClip)EditorGUILayout.ObjectField("AudioClip", _audioClip, typeof(AudioClip), false);
-                        DrawExtractAudioButton();
-                    }
-                }
-
-                if (EditorGUI.EndChangeCheck())
-                    _preset = FlipbookPreset.Custom;
-
-                EditorGUI.indentLevel--;
-            }
-            else if (_generatePrefab)
-            {
-                EditorGUILayout.Space();
-                EditorGUILayout.LabelField("Prefab / MA 設定", EditorStyles.boldLabel);
-
-                // Preset toolbar
-                var presetLabels3 = new[] { "おすすめ", "カスタム" };
-                EditorGUI.BeginChangeCheck();
-                var newPreset3 = (FlipbookPreset)GUILayout.Toolbar((int)_preset, presetLabels3);
-                if (EditorGUI.EndChangeCheck() && newPreset3 != _preset)
-                {
-                    _preset = newPreset3;
-                    ApplyPreset(_preset);
-                }
-
-                EditorGUI.indentLevel++;
-                EditorGUI.BeginChangeCheck();
-
-                _enableObjectToggle = EditorGUILayout.Toggle("MA Object Toggle を追加", _enableObjectToggle);
-                if (_enableObjectToggle)
-                {
-                    _enableMenu = EditorGUILayout.Toggle("MA Menu を追加", _enableMenu);
-                    using (new EditorGUILayout.HorizontalScope())
-                    {
-                        _toggleName = EditorGUILayout.TextField("トグル名", _toggleName);
-                        var toggleFolderPath = AssetPathOrNull(_inputFolder);
-                        if (toggleFolderPath != null && AssetDatabase.IsValidFolder(toggleFolderPath))
-                        {
-                            if (GUILayout.Button("Input Folderから取得", GUILayout.ExpandWidth(false)))
-                                _toggleName = Path.GetFileName(toggleFolderPath);
-                        }
-                    }
-
-                    _enableAudioSource = EditorGUILayout.Toggle("音源を追加", _enableAudioSource);
-                    if (_enableAudioSource)
-                    {
-                        _audioClip = (AudioClip)EditorGUILayout.ObjectField("AudioClip", _audioClip, typeof(AudioClip), false);
-                        DrawExtractAudioButton();
-                    }
-                }
-
-                if (EditorGUI.EndChangeCheck())
-                    _preset = FlipbookPreset.Custom;
-
-                EditorGUI.indentLevel--;
-            }
-
-            EditorGUILayout.Space();
-
-            var hasOutputName = !string.IsNullOrWhiteSpace(_outputName);
-            bool hasInput;
-            if (_inputMode == InputMode.VideoFile)
-            {
-                var videoAssetPath = _videoFile != null ? AssetDatabase.GetAssetPath(_videoFile) : null;
-                hasInput = videoAssetPath != null && FlipbookVideoConverter.IsVideoFile(videoAssetPath) && _ffmpegAvailable;
-            }
-            else
-            {
-                var inputPath = AssetPathOrNull(_inputFolder);
-                hasInput = inputPath != null && AssetDatabase.IsValidFolder(inputPath);
-            }
-
-            // Frame limit check for non-MultiPageSequence modes
-            var exceedsFrameLimit = false;
-            if (_outputMode != OutputMode.MultiPageSequence && hasInput)
-            {
-                var maxFrames = FlipbookSheetBuilder.CalculateMaxFrames(_maxSheetSize);
-                int estimatedFrameCount;
+                var frameCountForPreview = 0;
                 if (_inputMode == InputMode.VideoFile && _videoInfo != null)
                 {
-                    var effectiveDur = _enableTrim && _trimDuration > 0f ? _trimDuration : _videoInfo.Duration;
-                    estimatedFrameCount = Mathf.RoundToInt(effectiveDur * _fps);
+                    var effectiveDuration = _enableTrim && _trimDuration > 0f ? _trimDuration : _videoInfo.Duration;
+                    frameCountForPreview = Mathf.RoundToInt(effectiveDuration * _fps);
                 }
                 else
                 {
-                    var countPath = AssetPathOrNull(_inputFolder);
-                    estimatedFrameCount = countPath != null ? CountPngFiles(countPath) : 0;
+                    var previewPath = AssetPathOrNull(_inputFolder);
+                    if (previewPath != null && AssetDatabase.IsValidFolder(previewPath))
+                        frameCountForPreview = CountPngFiles(previewPath);
                 }
 
-                if (estimatedFrameCount > maxFrames)
+                if (frameCountForPreview > 0)
                 {
-                    exceedsFrameLimit = true;
-                    EditorGUILayout.HelpBox(
-                        $"フレーム数（推定 {estimatedFrameCount}）が最大シートサイズの収容上限（{maxFrames} フレーム）を超えています。\n" +
-                        "トリミングで減らすか、MultiPageSequence モードを使用してください。",
-                        MessageType.Error);
+                    var effectiveFpp = _framesPerPage > 0 ? _framesPerPage : FlipbookPageSplitter.CalculateFramesPerPage(_maxSheetSize);
+                    var preview = BuildSplitPreview(frameCountForPreview, effectiveFpp);
+                    DrawSubInfo(preview);
                 }
             }
+            } // end 入力設定 VerticalScope
 
-            using (new EditorGUI.DisabledScope(!hasInput || !hasOutputName || exceedsFrameLimit))
+            // === 出力設定 ===
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
             {
-                using (new EditorGUILayout.HorizontalScope())
-                {
-                    if (GUILayout.Button("Dry Run"))
-                    {
-                        FlipbookGeneratorLog.Enabled = _enableConsoleLog;
-                        FlipbookResultInfo result;
-                        if (_inputMode == InputMode.VideoFile)
-                            result = RunDryRunFromVideo();
-                        else
-                            result = RunDryRun(AssetPathOrNull(_inputFolder));
-                        if (result != null)
-                            ShowResultDialog(result);
-                    }
+            DrawSectionHeader("出力設定", "出力モードと保存先を設定します。");
 
-                    if (GUILayout.Button("Generate"))
-                    {
-                        FlipbookGeneratorLog.Enabled = _enableConsoleLog;
-                        FlipbookResultInfo result;
-                        if (_inputMode == InputMode.VideoFile)
-                            result = RunGenerateFromVideo();
-                        else
-                            result = RunGenerate(AssetPathOrNull(_inputFolder));
-                        if (result != null)
-                        {
-                            if (!string.IsNullOrEmpty(result.PingAssetPath))
-                                EditorGUIUtility.PingObject(
-                                    AssetDatabase.LoadMainAssetAtPath(result.PingAssetPath));
-                            ShowResultDialog(result);
-                        }
-                    }
-                }
+            // Output mode
+            var modeLabels = new[] { "Texture2DArray", "LilToon", "MultiPageSequence" };
+            var modeValues = new[] { OutputMode.Texture2DArray, OutputMode.LilToon, OutputMode.MultiPageSequence };
+            var modeIndex = Array.IndexOf(modeValues, _outputMode);
+            if (modeIndex < 0) modeIndex = 2; // fallback: MultiPageSequence
+            var prevOutputMode = _outputMode;
+            modeIndex = EditorGUILayout.Popup("出力モード", modeIndex, modeLabels);
+            _outputMode = modeValues[modeIndex];
+            if (_outputMode != prevOutputMode)
+            {
+                _preset = FlipbookPreset.Recommended;
+                ApplyPreset(_preset);
             }
 
-            if (!hasOutputName)
+            switch (_outputMode)
             {
-                EditorGUILayout.HelpBox("出力名を入力してください。", MessageType.Warning);
+                case OutputMode.Texture2DArray:
+                    EditorGUILayout.HelpBox("テクスチャ配列とシェーダーで再生。軽量、短いループアニメ向け。フレーム上限あり、音声同期不可。", MessageType.Info);
+                    break;
+                case OutputMode.LilToon:
+                    EditorGUILayout.HelpBox("lilToon の DecalAnimation で再生。軽量、lilToon アバターに直接組み込みたい時向け。フレーム上限あり、音声同期不可。", MessageType.Info);
+                    break;
+                case OutputMode.MultiPageSequence:
+                    EditorGUILayout.HelpBox("複数シートを Animator で切り替えて再生。やや重め、長尺・大量フレーム向け。フレーム上限なし、音声同期対応。", MessageType.Info);
+                    break;
             }
-            else if (!hasInput)
+
+            if (_outputMode == OutputMode.LilToon && !FlipbookMaterialBuilder.IsLilToonAvailable())
             {
-                if (_inputMode == InputMode.VideoFile)
-                {
-                    EditorGUILayout.HelpBox(
-                        _ffmpegAvailable
-                            ? "動画ファイルを Assets/ 以下に配置して指定してください。"
-                            : "FFmpeg をインストールし、PATH を通してから動画ファイルを指定してください。",
-                        MessageType.Warning);
-                }
-                else
-                {
-                    EditorGUILayout.HelpBox(
-                        "Input Folder に PNG 連番が入った Assets/ 以下のフォルダを指定してください。",
-                        MessageType.Warning);
-                }
+                EditorGUILayout.HelpBox(
+                    "lilToon がプロジェクトに導入されていません。Texture2DArray モードを使用してください。",
+                    MessageType.Warning);
+            }
+
+            // Output folder mode
+            var folderModeLabels = new GUIContent[]
+            {
+                new GUIContent("元ソース直下"),
+                new GUIContent("ツール共通フォルダ"),
+                new GUIContent("フォルダを指定"),
+            };
+            EditorGUI.BeginChangeCheck();
+            _outputFolderMode = (OutputFolderMode)EditorGUILayout.Popup(
+                new GUIContent("出力先"),
+                (int)_outputFolderMode,
+                folderModeLabels);
+            if (EditorGUI.EndChangeCheck())
+                RefreshSlotList();
+
+            if (_outputFolderMode == OutputFolderMode.Custom)
+            {
+                EditorGUI.BeginChangeCheck();
+                _outputFolder = (DefaultAsset)EditorGUILayout.ObjectField(
+                    "出力フォルダ", _outputFolder, typeof(DefaultAsset), false);
+                if (EditorGUI.EndChangeCheck())
+                    RefreshSlotList();
+            }
+
+            // Output path preview
+            DrawOutputPathPreview();
+
+            // Output name & slot
+            _outputName = EditorGUILayout.TextField("出力名", _outputName);
+
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                _slotIndex = EditorGUILayout.Popup("スロット", _slotIndex, _slotList);
+                if (GUILayout.Button("更新", GUILayout.Width(40)))
+                    RefreshSlotList();
+            }
+
+            if (_slotIndex > 0 && _slotIndex <= _slotFolderNames.Length)
+            {
+                EditorGUILayout.HelpBox(
+                    $"{_slotFolderNames[_slotIndex - 1]}/ を上書きします",
+                    MessageType.Warning);
             }
 
             // Slot browser
-            EditorGUILayout.Space();
             EditorGUI.BeginChangeCheck();
             _showSlotBrowser = EditorGUILayout.Foldout(_showSlotBrowser, "生成済みスロット一覧");
             if (EditorGUI.EndChangeCheck() && _showSlotBrowser)
@@ -746,7 +489,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                                     if (_slotIndex > 0 && _slotIndex <= _slotFolderNames.Length
                                         && _slotFolderNames[_slotIndex - 1] == slot.FolderName)
                                         _slotIndex = 0;
-                                    AssetDatabase.DeleteAsset(slot.AssetPath);
+                                    FlipbookFileUtility.DeleteFolderAndMeta(slot.AssetPath);
+                                    AssetDatabase.Refresh();
                                     RefreshSlotList();
                                     RefreshSlotBrowser();
                                     GUIUtility.ExitGUI();
@@ -756,6 +500,281 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                     }
                 }
             }
+            } // end 出力設定 VerticalScope
+
+            // === Prefab / MA 設定 ===
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+            DrawSectionHeader("Prefab / MA 設定", "Prefab 生成と MA コンポーネントの設定をします。");
+            _generatePrefab = EditorGUILayout.Toggle("Prefab も生成する", _generatePrefab);
+
+            if (_generatePrefab && _outputMode == OutputMode.MultiPageSequence)
+            {
+                // Preset toolbar
+                var presetLabels = new[] { "おすすめ", "カスタム" };
+                EditorGUI.BeginChangeCheck();
+                var newPreset = (FlipbookPreset)GUILayout.Toolbar((int)_preset, presetLabels);
+                if (EditorGUI.EndChangeCheck() && newPreset != _preset)
+                {
+                    _preset = newPreset;
+                    ApplyPreset(_preset);
+                }
+
+                EditorGUI.indentLevel++;
+
+                // Individual settings (always visible)
+                EditorGUI.BeginChangeCheck();
+
+                _enableMergeAnimator = EditorGUILayout.Toggle("MA Merge Animator", _enableMergeAnimator);
+
+                if (!_enableMergeAnimator)
+                {
+                    _enableObjectToggle = false;
+                    _enableMenu = false;
+                    EditorGUILayout.HelpBox(
+                        "MA Merge Animator が OFF の場合、AnimatorController はアバターの FX レイヤーに統合されません。\n" +
+                        "VRChat アバターで使う場合は ON にしてください。",
+                        MessageType.Warning);
+                }
+
+                if (_enableMergeAnimator)
+                    _enableObjectToggle = EditorGUILayout.Toggle("MA Object Toggle", _enableObjectToggle);
+
+                if (_enableObjectToggle && _enableMergeAnimator)
+                {
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        _toggleName = EditorGUILayout.TextField("トグル名", _toggleName);
+                        var toggleFolderPath = AssetPathOrNull(_inputFolder);
+                        if (toggleFolderPath != null && AssetDatabase.IsValidFolder(toggleFolderPath))
+                        {
+                            if (GUILayout.Button("入力フォルダから取得", GUILayout.ExpandWidth(false)))
+                                _toggleName = Path.GetFileName(toggleFolderPath);
+                        }
+                    }
+
+                    _enableAudioSource = EditorGUILayout.Toggle("音源を追加", _enableAudioSource);
+                    if (_enableAudioSource)
+                    {
+                        _audioClip = (AudioClip)EditorGUILayout.ObjectField("AudioClip", _audioClip, typeof(AudioClip), false);
+                        DrawExtractAudioButton();
+                    }
+                }
+
+                if (EditorGUI.EndChangeCheck())
+                    _preset = FlipbookPreset.Custom;
+
+                EditorGUI.indentLevel--;
+            }
+            else if (_generatePrefab)
+            {
+                // Preset toolbar
+                var presetLabels3 = new[] { "おすすめ", "カスタム" };
+                EditorGUI.BeginChangeCheck();
+                var newPreset3 = (FlipbookPreset)GUILayout.Toolbar((int)_preset, presetLabels3);
+                if (EditorGUI.EndChangeCheck() && newPreset3 != _preset)
+                {
+                    _preset = newPreset3;
+                    ApplyPreset(_preset);
+                }
+
+                EditorGUI.indentLevel++;
+                EditorGUI.BeginChangeCheck();
+
+                _enableObjectToggle = EditorGUILayout.Toggle("MA Object Toggle を追加", _enableObjectToggle);
+                if (_enableObjectToggle)
+                {
+                    _enableMenu = EditorGUILayout.Toggle("MA Menu を追加", _enableMenu);
+                    using (new EditorGUILayout.HorizontalScope())
+                    {
+                        _toggleName = EditorGUILayout.TextField("トグル名", _toggleName);
+                        var toggleFolderPath = AssetPathOrNull(_inputFolder);
+                        if (toggleFolderPath != null && AssetDatabase.IsValidFolder(toggleFolderPath))
+                        {
+                            if (GUILayout.Button("入力フォルダから取得", GUILayout.ExpandWidth(false)))
+                                _toggleName = Path.GetFileName(toggleFolderPath);
+                        }
+                    }
+
+                    _enableAudioSource = EditorGUILayout.Toggle("音源を追加", _enableAudioSource);
+                    if (_enableAudioSource)
+                    {
+                        _audioClip = (AudioClip)EditorGUILayout.ObjectField("AudioClip", _audioClip, typeof(AudioClip), false);
+                        DrawExtractAudioButton();
+                    }
+                }
+
+                if (EditorGUI.EndChangeCheck())
+                    _preset = FlipbookPreset.Custom;
+
+                EditorGUI.indentLevel--;
+            }
+            } // end Prefab / MA 設定 VerticalScope
+
+            // === 実行 ===
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+            DrawSectionHeader("実行", "Dry Run で確認してから Generate できます。");
+
+            var hasOutputName = !string.IsNullOrWhiteSpace(_outputName);
+            bool hasInput;
+            if (_inputMode == InputMode.VideoFile)
+            {
+                var videoAssetPath = _videoFile != null ? AssetDatabase.GetAssetPath(_videoFile) : null;
+                hasInput = videoAssetPath != null && FlipbookVideoConverter.IsVideoFile(videoAssetPath) && _ffmpegAvailable;
+            }
+            else
+            {
+                var inputPath = AssetPathOrNull(_inputFolder);
+                hasInput = inputPath != null && AssetDatabase.IsValidFolder(inputPath);
+            }
+
+            if (!hasOutputName)
+            {
+                EditorGUILayout.HelpBox("出力名を入力してください。", MessageType.Warning);
+            }
+            else if (!hasInput)
+            {
+                if (_inputMode == InputMode.VideoFile)
+                {
+                    EditorGUILayout.HelpBox(
+                        _ffmpegAvailable
+                            ? "動画ファイルを Assets/ 以下に配置して指定してください。"
+                            : "FFmpeg をインストールし、PATH を通してから動画ファイルを指定してください。",
+                        MessageType.Warning);
+                }
+                else
+                {
+                    EditorGUILayout.HelpBox(
+                        "入力フォルダに PNG 連番が入った Assets/ 以下のフォルダを指定してください。",
+                        MessageType.Warning);
+                }
+            }
+
+            // Frame limit check for non-MultiPageSequence modes
+            var exceedsFrameLimit = false;
+            if (_outputMode != OutputMode.MultiPageSequence && hasInput)
+            {
+                var maxFrames = FlipbookSheetBuilder.CalculateMaxFrames(_maxSheetSize);
+                int estimatedFrameCount;
+                if (_inputMode == InputMode.VideoFile && _videoInfo != null)
+                {
+                    var effectiveDur = _enableTrim && _trimDuration > 0f ? _trimDuration : _videoInfo.Duration;
+                    estimatedFrameCount = Mathf.RoundToInt(effectiveDur * _fps);
+                }
+                else
+                {
+                    var countPath = AssetPathOrNull(_inputFolder);
+                    estimatedFrameCount = countPath != null ? CountPngFiles(countPath) : 0;
+                }
+
+                if (estimatedFrameCount > maxFrames)
+                {
+                    exceedsFrameLimit = true;
+                    EditorGUILayout.HelpBox(
+                        $"フレーム数（推定 {estimatedFrameCount}）が最大シートサイズの収容上限（{maxFrames} フレーム）を超えています。\n" +
+                        "トリミングで減らすか、MultiPageSequence モードを使用してください。",
+                        MessageType.Error);
+                }
+            }
+
+            // AudioClip 未指定チェック
+            if (_generatePrefab && _enableAudioSource && _audioClip == null)
+            {
+                EditorGUILayout.HelpBox(
+                    "「音源を追加」が ON ですが AudioClip が指定されていません。音声なしで生成されます。",
+                    MessageType.Warning);
+            }
+
+            using (new EditorGUI.DisabledScope(!hasInput || !hasOutputName || exceedsFrameLimit))
+            {
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    if (GUILayout.Button("Dry Run"))
+                    {
+                        FlipbookGeneratorLog.Enabled = _enableConsoleLog;
+                        FlipbookResultInfo result;
+                        if (_inputMode == InputMode.VideoFile)
+                            result = RunDryRunFromVideo();
+                        else
+                            result = RunDryRun(AssetPathOrNull(_inputFolder));
+                        if (result != null)
+                            ShowResultDialog(result);
+                    }
+
+                    if (GUILayout.Button("Generate"))
+                    {
+                        FlipbookGeneratorLog.Enabled = _enableConsoleLog;
+                        FlipbookResultInfo result;
+                        if (_inputMode == InputMode.VideoFile)
+                            result = RunGenerateFromVideo();
+                        else
+                            result = RunGenerate(AssetPathOrNull(_inputFolder));
+                        if (result != null)
+                        {
+                            if (!string.IsNullOrEmpty(result.PingAssetPath))
+                                EditorGUIUtility.PingObject(
+                                    AssetDatabase.LoadMainAssetAtPath(result.PingAssetPath));
+                            ShowResultDialog(result);
+                        }
+                    }
+                }
+            }
+            } // end 実行 VerticalScope
+
+            // === 上級設定 ===
+            EditorGUILayout.Space();
+            _showAdvanced = EditorGUILayout.Foldout(_showAdvanced, "上級設定");
+            if (_showAdvanced)
+            {
+                using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+                {
+                if (_inputMode == InputMode.VideoFile)
+                {
+                    _extractMaxResolution = EditorGUILayout.IntPopup(
+                        new GUIContent("最大解像度"),
+                        _extractMaxResolution,
+                        new[] { new GUIContent("256"), new GUIContent("512"), new GUIContent("1024") },
+                        new[] { 256, 512, 1024 });
+                }
+
+                var sizeLabels = new GUIContent[]
+                {
+                    new GUIContent("512"),
+                    new GUIContent("1024"),
+                    new GUIContent("2048"),
+                    new GUIContent("4096"),
+                };
+                _maxSheetSize = EditorGUILayout.IntPopup(
+                    new GUIContent("最大シートサイズ"),
+                    _maxSheetSize,
+                    sizeLabels,
+                    MaxSheetSizeOptions);
+
+                if (_outputMode == OutputMode.MultiPageSequence)
+                {
+                    _autoSplit = EditorGUILayout.Toggle("自動分割", _autoSplit);
+                    if (_autoSplit)
+                    {
+                        var auto = FlipbookPageSplitter.CalculateFramesPerPage(_maxSheetSize);
+                        if (_framesPerPage <= 0) _framesPerPage = auto;
+                        _framesPerPage = EditorGUILayout.IntField("1ページ最大フレーム数", _framesPerPage);
+                        EditorGUILayout.HelpBox(
+                            $"フレームサイズ 256px / シート上限 {_maxSheetSize}px → 自動算出値: {auto}",
+                            MessageType.None);
+                    }
+                    else
+                    {
+                        _framesPerPage = EditorGUILayout.IntField("1ページ最大フレーム数", _framesPerPage);
+                    }
+                    if (_framesPerPage < 1) _framesPerPage = 1;
+                }
+
+                _enableConsoleLog = EditorGUILayout.Toggle("コンソールにログを出力", _enableConsoleLog);
+                } // end 上級設定 VerticalScope
+            }
+
+            EditorGUILayout.EndScrollView();
         }
 
         private int CountPngFiles(string inputPath)
@@ -931,9 +950,6 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
         private FlipbookResultInfo RunGenerate(string inputPath)
         {
-            var frames = FlipbookFrameLoader.Load(inputPath);
-            if (frames.Length == 0) return null;
-
             var outputDir = ResolveSlotDir(inputPath);
             EnsureFolderExists(outputDir);
             if (_slotIndex > 0)
@@ -941,22 +957,28 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             var baseName = _outputName;
 
             FlipbookResultInfo result;
-            switch (_outputMode)
+            if (_outputMode == OutputMode.MultiPageSequence)
             {
-                case OutputMode.Texture2DArray:
-                    result = GenerateArray(frames, outputDir, baseName);
-                    break;
-                case OutputMode.LilToon:
-                    result = GenerateLilToon(frames, outputDir, baseName);
-                    break;
-                case OutputMode.MultiPageSequence:
-                    var allFrames = FlipbookFrameLoader.LoadAll(inputPath);
-                    if (allFrames.Length == 0) return null;
-                    result = GenerateMultiPageSequenceFromFrames(allFrames, outputDir, baseName);
-                    break;
-                default:
-                    result = null;
-                    break;
+                var allFrames = FlipbookFrameLoader.LoadAll(inputPath);
+                if (allFrames.Length == 0) return null;
+                result = GenerateMultiPageSequenceFromFrames(allFrames, outputDir, baseName);
+            }
+            else
+            {
+                var frames = FlipbookFrameLoader.Load(inputPath);
+                if (frames.Length == 0) return null;
+                switch (_outputMode)
+                {
+                    case OutputMode.Texture2DArray:
+                        result = GenerateArray(frames, outputDir, baseName);
+                        break;
+                    case OutputMode.LilToon:
+                        result = GenerateLilToon(frames, outputDir, baseName);
+                        break;
+                    default:
+                        result = null;
+                        break;
+                }
             }
 
             RefreshSlotList();
@@ -1444,7 +1466,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             foreach (var sub in AssetDatabase.GetSubFolders(slotDir))
             {
                 if (Path.GetFileName(sub) == FlipbookConstants.AudioObjectName) continue;
-                AssetDatabase.DeleteAsset(sub);
+                FlipbookFileUtility.DeleteFolderAndMeta(sub);
             }
 
             // Delete remaining files directly under slot folder (preserve Audio/)
@@ -1456,9 +1478,11 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 if (parent == slotDir)
                 {
                     if (Path.GetFileName(path) == FlipbookConstants.AudioObjectName) continue;
-                    AssetDatabase.DeleteAsset(path);
+                    FlipbookFileUtility.DeleteFileAndMeta(path);
                 }
             }
+
+            AssetDatabase.Refresh();
         }
 
         private static void EnsureFolderExists(string path)
@@ -1476,6 +1500,49 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             }
         }
 
+        private static void DrawSectionHeader(string title, string description)
+        {
+            EditorGUILayout.LabelField(title, EditorStyles.boldLabel);
+            DrawSubInfo(description);
+        }
+
+        private static void DrawSubInfo(string text)
+        {
+            var style = new GUIStyle(EditorStyles.wordWrappedMiniLabel);
+            var prev = GUI.contentColor;
+            GUI.contentColor = new Color(0.75f, 0.75f, 0.75f, 1f);
+            EditorGUILayout.LabelField(text, style);
+            GUI.contentColor = prev;
+        }
+
+        private void DrawOutputPathPreview()
+        {
+            var sourcePathHint = _inputMode == InputMode.VideoFile && _videoFile != null
+                ? AssetDatabase.GetAssetPath(_videoFile) ?? ""
+                : AssetPathOrNull(_inputFolder) ?? "";
+            var previewRoot = ResolveGeneratedRoot(sourcePathHint);
+
+            if (string.IsNullOrWhiteSpace(_outputName))
+            {
+                EditorGUILayout.LabelField("現在の出力先", "出力名を入力してください");
+            }
+            else
+            {
+                string previewPath;
+                if (_slotIndex > 0 && _slotIndex <= _slotFolderNames.Length)
+                    previewPath = $"{previewRoot}/{_slotFolderNames[_slotIndex - 1]}/";
+                else
+                    previewPath = $"{previewRoot}/{GetNextSlotNumber(previewRoot):D2}_{_outputName}/";
+                EditorGUILayout.LabelField("現在の出力先", previewPath);
+            }
+
+            var descStyle = new GUIStyle(EditorStyles.wordWrappedMiniLabel);
+            var prevColor = GUI.contentColor;
+            GUI.contentColor = new Color(0.75f, 0.75f, 0.75f, 1f);
+            EditorGUILayout.LabelField("実際に保存される場所です。", descStyle);
+            GUI.contentColor = prevColor;
+        }
+
         private void DrawExtractAudioButton()
         {
             if (_inputMode != InputMode.VideoFile || _videoFile == null || !_ffmpegAvailable)
@@ -1487,7 +1554,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
 
             if (_videoInfo != null && !_videoInfo.HasAudioTrack)
             {
-                EditorGUILayout.HelpBox("この動画に音声トラックはありません。", MessageType.Info);
+                EditorGUILayout.HelpBox("この動画に音声トラックはありません。", MessageType.Warning);
                 return;
             }
 

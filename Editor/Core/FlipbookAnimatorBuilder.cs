@@ -14,7 +14,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             // 1. Delete existing file to prevent stale asset reuse
             if (AssetDatabase.LoadAssetAtPath<AnimatorController>(outputPath) != null)
             {
-                AssetDatabase.DeleteAsset(outputPath);
+                FlipbookFileUtility.DeleteFileAndMeta(outputPath);
+                AssetDatabase.Refresh();
             }
 
             // 2. Create controller file (rootStateMachine is auto-registered)
@@ -67,7 +68,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             var idleClipPath = $"{idleClipDir}/Idle.anim";
             if (AssetDatabase.LoadAssetAtPath<AnimationClip>(idleClipPath) != null)
             {
-                AssetDatabase.DeleteAsset(idleClipPath);
+                FlipbookFileUtility.DeleteFileAndMeta(idleClipPath);
                 AssetDatabase.Refresh();
             }
             AssetDatabase.CreateAsset(idleClip, idleClipPath);
