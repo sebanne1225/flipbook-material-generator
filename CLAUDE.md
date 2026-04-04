@@ -6,6 +6,9 @@
 
 3モード（Texture2DArray / LilToon / MultiPageSequence）× 2入力モード（VideoFile / PngSequence）が動作する状態。SpriteSheet モードは除外済み。
 
+version 1.0.0 リリース完了。GitHub Release / VPM listing / VCC 導入確認済み。
+BOOTH 商品ページ作成が残っている。
+
 ### 入力
 - VideoFile モード: Assets 内動画ファイルを ObjectField で選択、ffprobe で参考情報表示、FFmpeg で PNG 抽出・音声抽出・トリミング対応（-ss/-t）
 - FFmpeg PNG 抽出キャッシュ: %TEMP%/FlipbookFrames/{hash}/ にキャッシュ。動画パス+FPS+トリム+解像度+最終更新日時の MD5 ハッシュ。一致すれば抽出スキップ
@@ -157,8 +160,9 @@
 - Editor-only ファイルの namespace は `Sebanne.FlipbookMaterialGenerator.Editor` に統一する。
 
 ## 次フェーズ候補（後回し）
-- AudioClip 未指定警告（音源追加 ON + AudioClip null で Generate 時に警告が出ない）
 - Texture2DArray clamp=64 と CalculateMaxFrames のズレ整理（安全側、実害なし）
 - FPS 計算機の折りたたみ化（PNG モード時に目立ちすぎ）
 - lilToon プロパティ名ハードコード（バージョンアップ時に手動確認の運用）
 - おすすめプリセットの設定値を詰める（UI改善）
+- 生成前の容量見積もり表示（テクスチャサイズ、できればダウンロードサイズ）
+- Quad 裏表問題の改善（Edit Only ダミーオブジェクト / ガイド枠の案）
