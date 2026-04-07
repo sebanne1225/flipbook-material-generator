@@ -57,7 +57,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             {
                 var col = i % columns;
                 var row = rows - 1 - i / columns; // top-left origin
-                var readable = MakeReadable(frames[i], frameSize, frameSize);
+                var readable = FlipbookFileUtility.MakeReadable(frames[i], frameSize, frameSize);
                 if (readable == null)
                 {
                     FlipbookGeneratorLog.Error($"Failed to read frame {i}: {frames[i].name}");
@@ -76,8 +76,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             UnityEngine.Object.DestroyImmediate(sheet);
 
             var directory = Path.GetDirectoryName(outputPath);
-            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
-                Directory.CreateDirectory(directory);
+            if (!string.IsNullOrEmpty(directory))
+                FlipbookFileUtility.EnsureAssetFolderExists(directory);
 
             File.WriteAllBytes(outputPath, pngBytes);
             AssetDatabase.ImportAsset(outputPath, ImportAssetOptions.ForceUpdate);
@@ -109,20 +109,5 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             return (columns, rows);
         }
 
-        private static Texture2D MakeReadable(Texture2D source, int width, int height)
-        {
-            var prev = RenderTexture.active;
-            var rt = RenderTexture.GetTemporary(width, height, 0, RenderTextureFormat.ARGB32);
-            Graphics.Blit(source, rt);
-            RenderTexture.active = rt;
-
-            var readable = new Texture2D(width, height, TextureFormat.RGBA32, false);
-            readable.ReadPixels(new Rect(0, 0, width, height), 0, 0);
-            readable.Apply();
-
-            RenderTexture.active = prev;
-            RenderTexture.ReleaseTemporary(rt);
-            return readable;
-        }
     }
 }

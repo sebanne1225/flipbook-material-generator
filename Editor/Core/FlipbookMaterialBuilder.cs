@@ -31,10 +31,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             material.SetFloat("_FPS", fps);
 
             var directory = Path.GetDirectoryName(outputPath);
-            if (!string.IsNullOrEmpty(directory) && !AssetDatabase.IsValidFolder(directory))
-            {
-                CreateFolderRecursive(directory);
-            }
+            if (!string.IsNullOrEmpty(directory))
+                FlipbookFileUtility.EnsureAssetFolderExists(directory);
 
             var existing = AssetDatabase.LoadAssetAtPath<Material>(outputPath);
             if (existing != null)
@@ -80,10 +78,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             material.SetFloat(FlipbookConstants.ShaderCurrentFrame, 0f);
 
             var directory = Path.GetDirectoryName(outputPath);
-            if (!string.IsNullOrEmpty(directory) && !AssetDatabase.IsValidFolder(directory))
-            {
-                CreateFolderRecursive(directory);
-            }
+            if (!string.IsNullOrEmpty(directory))
+                FlipbookFileUtility.EnsureAssetFolderExists(directory);
 
             var existing = AssetDatabase.LoadAssetAtPath<Material>(outputPath);
             if (existing != null)
@@ -143,10 +139,8 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 new Vector4(1f, 1f, 0f, 0f)); // loopX, loopY, offset, (unused)
 
             var directory = Path.GetDirectoryName(outputPath);
-            if (!string.IsNullOrEmpty(directory) && !AssetDatabase.IsValidFolder(directory))
-            {
-                CreateFolderRecursive(directory);
-            }
+            if (!string.IsNullOrEmpty(directory))
+                FlipbookFileUtility.EnsureAssetFolderExists(directory);
 
             var existing = AssetDatabase.LoadAssetAtPath<Material>(outputPath);
             if (existing != null)
@@ -172,18 +166,5 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             return material;
         }
 
-        private static void CreateFolderRecursive(string folderPath)
-        {
-            if (AssetDatabase.IsValidFolder(folderPath)) return;
-
-            var parent = Path.GetDirectoryName(folderPath);
-            if (!string.IsNullOrEmpty(parent) && !AssetDatabase.IsValidFolder(parent))
-            {
-                CreateFolderRecursive(parent);
-            }
-
-            var folderName = Path.GetFileName(folderPath);
-            AssetDatabase.CreateFolder(parent, folderName);
-        }
     }
 }

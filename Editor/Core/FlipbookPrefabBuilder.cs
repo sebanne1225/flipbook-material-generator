@@ -147,8 +147,6 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 // MA optional integration
                 if (enableObjectToggle)
                     TryAttachObjectToggleAndMenuItem(root, pagesObj, toggleName, enableMenu, null, isMultiPage: true);
-                else if (enableMergeAnimator)
-                    TryAttachModularAvatar(root);
                 if (enableMergeAnimator)
                     TryAttachMergeAnimator(root, controller);
 
@@ -354,23 +352,6 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                 FlipbookGeneratorLog.Info($"MA Menu + ObjectToggle attached (toggle: '{toggleName}', default: OFF).");
             else
                 FlipbookGeneratorLog.Info($"MA ObjectToggle attached (target: '{toggleTarget.name}').");
-        }
-
-        private static void TryAttachModularAvatar(GameObject root)
-        {
-            var menuInstallerType = FindType(MAMenuInstallerTypeName);
-            var objectToggleType = FindType(MAObjectToggleTypeName);
-
-            if (menuInstallerType == null || objectToggleType == null)
-            {
-                FlipbookGeneratorLog.Info("Modular Avatar not detected. Skipping MA components.");
-                return;
-            }
-
-            root.AddComponent(menuInstallerType);
-            root.AddComponent(objectToggleType);
-
-            FlipbookGeneratorLog.Info("Modular Avatar detected. MenuInstaller and ObjectToggle attached.");
         }
 
         private static void TryAttachMergeAnimator(GameObject root, AnimatorController controller)
