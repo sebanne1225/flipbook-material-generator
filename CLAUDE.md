@@ -6,9 +6,10 @@
 
 3モード（Texture2DArray / LilToon / MultiPageSequence）× 2入力モード（VideoFile / PngSequence）が動作する状態。SpriteSheet モードは除外済み。
 
-version 1.0.0 リリース完了。GitHub Release / VPM listing / VCC 導入確認済み。
-BOOTH 商品ページ公開済み（商品説明文・サムネイル・クレジット）。
-GitHub Release / VPM listing / VCC / BOOTH すべて公開完了。
+version 1.0.0 公開完了（GitHub Release / VPM listing / VCC / BOOTH）。
+
+version 1.1.0 開発中（version bump 前）。
+第1弾（バグ修正 + コード整理: clamp=64 修正、重複コード統合、デッドコード削除）・第2弾（UI 改善: プリセット拡張、FPS 計算機 Foldout 化、容量見積もり、秒数ガイド）実装完了。
 
 ### 入力
 - VideoFile モード: Assets 内動画ファイルを ObjectField で選択、ffprobe で参考情報表示、FFmpeg で PNG 抽出・音声抽出・トリミング対応（-ss/-t）
@@ -45,8 +46,8 @@ GitHub Release / VPM listing / VCC / BOOTH すべて公開完了。
 - 5セクション構成（入力設定・出力設定・Prefab/MA設定・実行・上級設定）、helpBox 枠で Skinned Mesh Mirror 式ブロック分け
 - セクション見出しは DrawSectionHeader（boldLabel + miniLabel 補助文）
 - DrawSubInfo ヘルパーで情報表示用 miniLabel を共通化
-- FPS・トリミングは入力設定セクション内、MPS 分割プレビューはフレーム推定の直後
-- 出力モード Popup 直下に Info HelpBox でモード説明（再生方式・重さ・用途・制約）
+- FPS・トリミングは入力設定セクション内、FPS 計算機は Foldout 化（デフォルト閉、SerializeField で domain reload 対応）、MPS 分割プレビューはフレーム推定の直後
+- 出力モード Popup 直下に Info HelpBox でモード説明（再生方式・重さ・用途・制約）。Texture2DArray / LilToon はモード説明直後に秒数ガイド DrawSubInfo（最大フレーム数 ≈ 秒数）
 - 出力先パスは Skinned Mesh Mirror 式（「現在の出力先」ラベル + 完全パス + 補助文）
 - スロット一覧はスロット選択の直下（Foldout）
 - 入力不足案内は Dry Run / Generate ボタンの上
@@ -55,8 +56,9 @@ GitHub Release / VPM listing / VCC / BOOTH すべて公開完了。
 - HelpBox は警告・エラー専用。説明・情報表示は DrawSubInfo（miniLabel）
 - ラベルはツール概念語を日本語化済み（出力モード、入力フォルダ、出力フォルダ、PNG連番 FPS）
 - コンポーネント固有名（MA, Prefab, AudioClip 等）は英語のまま
-- プリセット UI（おすすめ / カスタム）全3モード対応
-- FPS 補助計算 UI（分秒入力・入力フォルダから自動カウント）
+- プリセット Toolbar は常時表示（_generatePrefab の上）。ApplyPreset は _generatePrefab=true、MPS 時 _autoSplit=true を含む。プリセット説明 DrawSubInfo 付き
+- FPS 補助計算 UI（分秒入力・入力フォルダから自動カウント）。Foldout 内、デフォルト閉
+- 容量見積もり: 実行セクション内に推定テクスチャメモリー増加 (DXT5) を DrawSubInfo 表示。EstimateTextureBytes() に計算一本化。OnGUI / DryRun ダイアログ / Generate ダイアログ全箇所で統一
 - domain reload 対応済み（SerializeField + _videoInfo re-probe）
 - enableMenu=false 時は MA Menu を生成せず ObjectToggle を root に直接アタッチ
 
@@ -118,6 +120,11 @@ GitHub Release / VPM listing / VCC / BOOTH すべて公開完了。
 - Audio 用途はループ BGM・環境音など同期不要のものに限られる
 - MultiPageSequence のみ Animator 制御なので Animation layer 連動で映像・音声の同期が可能
 
+### テクスチャメモリー見積もり
+- EstimateTextureBytes の frameSize は Builder の DefaultFrameSize (256) を起点にする。_extractMaxResolution は FFmpeg 抽出時の解像度であり、シート書き込み時のフレームサイズではない
+- VRChat テクスチャメモリー ≈ DXT5 (1 byte/pixel)。RGBA32 未圧縮 (4 bytes/pixel) はユーザーの直感（VRChat パフォーマンスランク画面の値）と乖離する
+- EstimateTextureBytes() に計算を一本化し、OnGUI / DryRun / Generate の全箇所で再利用する
+
 ### Audio 制御: m_IsActive vs m_Enabled
 - AudioSource.m_Enabled の OFF→ON では playOnAwake は発火しない（コンポーネント有効化のみ）
 - GameObject.m_IsActive の OFF→ON で playOnAwake が発火し、再生が先頭から始まる
@@ -129,7 +136,7 @@ GitHub Release / VPM listing / VCC / BOOTH すべて公開完了。
 - `Editor/FlipbookMaterialGeneratorWindow.cs` — メインウィンドウ。5セクション構成（入力設定・出力設定・Prefab/MA設定・実行・上級設定）。ScrollView + helpBox 枠。DrawSectionHeader / DrawSubInfo / DrawOutputPathPreview ヘルパー。
 - `Editor/Core/FlipbookConstants.cs` — パス文字列・オブジェクト名・Animatorパラメータ名・シェーダープロパティ名の定数定義。
 - `Editor/Core/FlipbookVideoConverter.cs` — FFmpeg 動画入力。IsFFmpegAvailable / Probe(ffprobe、音声トラック検出含む) / ExtractFrames(PNG抽出→Texture2D[]、ハッシュベースキャッシュ対応) / ExtractAudio(WAV抽出→AudioClip、キャッシュキー照合対応)。
-- `Editor/Core/FlipbookFrameLoader.cs` — PNG 連番読み込み。AssetDatabase 経由、上限なし（LoadAll）。読み込み失敗フレームはスキップ続行（Warn ログ）。Generated_Flipbook 除外フィルタ付き。
+- `Editor/Core/FlipbookFrameLoader.cs` — PNG 連番読み込み。Load（maxFrames パラメータで上限指定）と LoadAll（上限なし、MPS 用）。AssetDatabase 経由。読み込み失敗フレームはスキップ続行（Warn ログ）。Generated_Flipbook 除外フィルタ付き。
 - `Editor/Core/FlipbookSheetBuilder.cs` — スプライトシート生成。自動グリッド計算、最大 2048x2048。FlipbookSheetResult を返す。
 - `Editor/Core/FlipbookMaterialBuilder.cs` — マテリアル生成。BuildFromArray / BuildForSequence / BuildForLilToon の 3 メソッド。既存マテリアルは CopyPropertiesFromMaterial で GUID 保持更新。
 - `Editor/Core/FlipbookPrefabBuilder.cs` — Prefab 生成。Build（3モード用）と BuildMultiPage（MultiPageSequence用）。MA Menu 構造（MenuInstaller + SubMenu MenuItem + ObjectToggle。MultiPageSequence は Toggle + Loop + Reset、3モードは Toggle のみ）を生成、MergeAnimator をアタッチ（リフレクション方式、optional、MultiPageSequence のみ）。
@@ -137,7 +144,7 @@ GitHub Release / VPM listing / VCC / BOOTH すべて公開完了。
 - `Editor/Core/FlipbookAnimationBuilder.cs` — MultiPageSequence 用。各ページのAnimationClipを生成。
 - `Editor/Core/FlipbookAnimatorBuilder.cs` — MultiPageSequence 用。AnimatorControllerを生成（Idle + Page + ResetPage1 ステート、FlipbookEnabled / FlipbookLoop / FlipbookReset パラメータ）。
 - `Editor/Core/FlipbookResultInfo.cs` — 結果ダイアログ用データクラス（IsDryRun / Success / ModeName / Lines / PingAssetPath）。
-- `Editor/Core/FlipbookFileUtility.cs` — ファイル/フォルダ削除ユーティリティ。DeleteFileAndMeta / DeleteFolderAndMeta。File.Delete ベース（ゴミ箱を経由しない完全削除）。
+- `Editor/Core/FlipbookFileUtility.cs` — 共通ユーティリティ。DeleteFileAndMeta / DeleteFolderAndMeta（File.Delete ベース、ゴミ箱を経由しない完全削除）。EnsureAssetFolderExists（AssetDatabase.CreateFolder ベースの再帰フォルダ作成）。MakeReadable（Texture2D を読み取り可能にリサイズ）。
 - `Editor/Diagnostics/FlipbookGeneratorLog.cs` — ログユーティリティ。prefix `[FlipbookMaterialGenerator]`。Enabled ゲート付き（Info/Warn のみ、Error は常時出力）。
 
 ### Runtime
@@ -161,9 +168,8 @@ GitHub Release / VPM listing / VCC / BOOTH すべて公開完了。
 - Editor-only ファイルの namespace は `Sebanne.FlipbookMaterialGenerator.Editor` に統一する。
 
 ## 次フェーズ候補（後回し）
-- Texture2DArray clamp=64 と CalculateMaxFrames のズレ整理（安全側、実害なし）
-- FPS 計算機の折りたたみ化（PNG モード時に目立ちすぎ）
 - lilToon プロパティ名ハードコード（バージョンアップ時に手動確認の運用）
-- おすすめプリセットの設定値を詰める（UI改善）
-- 生成前の容量見積もり表示（テクスチャサイズ、できればダウンロードサイズ）
 - Quad 裏表問題の改善（Edit Only ダミーオブジェクト / ガイド枠の案）
+- Video 入力 + 非 MPS モードで ExtractFrames がフレーム上限を超えるケース（UI ガードで事実上ブロック、コードレベルのキャップなし）
+- NDMF ビルドレポートにテクスチャメモリー増加量表示
+- LilToon Generate ダイアログの Sheet サイズ表示ハードコード（sheetResult.Columns * 256 — frameSize 縮小時に不正確）
