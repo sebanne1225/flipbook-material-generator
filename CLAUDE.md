@@ -7,7 +7,8 @@
 3モード（Texture2DArray / LilToon / MultiPageSequence）× 2入力モード（VideoFile / PngSequence）が動作する状態。SpriteSheet モードは除外済み。
 
 version 1.0.0 リリース完了。GitHub Release / VPM listing / VCC 導入確認済み。
-BOOTH 商品ページ作成が残っている。
+BOOTH 商品ページ公開済み（商品説明文・サムネイル・クレジット）。
+GitHub Release / VPM listing / VCC / BOOTH すべて公開完了。
 
 ### 入力
 - VideoFile モード: Assets 内動画ファイルを ObjectField で選択、ffprobe で参考情報表示、FFmpeg で PNG 抽出・音声抽出・トリミング対応（-ss/-t）
