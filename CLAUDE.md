@@ -8,8 +8,7 @@
 
 version 1.0.0 公開完了（GitHub Release / VPM listing / VCC / BOOTH）。
 
-version 1.1.0 開発中（version bump 前）。
-第1弾（バグ修正 + コード整理: clamp=64 修正、重複コード統合、デッドコード削除）・第2弾（UI 改善: プリセット拡張、FPS 計算機 Foldout 化、容量見積もり、秒数ガイド）実装完了。
+version 1.1.0 リリース完了（GitHub Release / VPM listing / BOOTH）。
 
 ### 入力
 - VideoFile モード: Assets 内動画ファイルを ObjectField で選択、ffprobe で参考情報表示、FFmpeg で PNG 抽出・音声抽出・トリミング対応（-ss/-t）
@@ -173,3 +172,4 @@ version 1.1.0 開発中（version bump 前）。
 - Video 入力 + 非 MPS モードで ExtractFrames がフレーム上限を超えるケース（UI ガードで事実上ブロック、コードレベルのキャップなし）
 - NDMF ビルドレポートにテクスチャメモリー増加量表示
 - LilToon Generate ダイアログの Sheet サイズ表示ハードコード（sheetResult.Columns * 256 — frameSize 縮小時に不正確）
+- BOOTH 同梱 PDF 使い方ガイド（全機能紹介ドキュメント）
