@@ -1,6 +1,6 @@
 Flipbook Material Generator
 BOOTH 配布パッケージ案内
-version: 1.0.0
+version: 1.1.0
 
 このツールは、動画ファイルまたは PNG 連番フォルダから、
 VRChat 向けのフリップブックアニメーション素材を自動生成する Unity Editor ツールです。

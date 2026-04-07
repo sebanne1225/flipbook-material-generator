@@ -1,7 +1,7 @@
 {
   "name": "com.sebanne.flipbook-material-generator",
   "displayName": "Flipbook Material Generator",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "unity": "2022.3",
   "description": "動画ファイルまたは PNG 連番から、VRChat 向けのフリップブックアニメーション素材を自動生成する Unity Editor ツールです。",
   "documentationUrl": "https://github.com/sebanne1225/flipbook-material-generator/blob/master/README.md",

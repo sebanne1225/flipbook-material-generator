@@ -2,6 +2,26 @@
 
 このファイルは `Flipbook Material Generator` の変更履歴を管理します。
 
+## [1.1.0] - 2026-04-07
+
+### Fixed
+
+- Texture2DArray / LilToon のフレーム上限が 64 にハードコードされていた問題を修正（最大シートサイズに応じた動的計算に統一）
+
+### Changed
+
+- フォルダ作成・テクスチャ読み込みの重複コードを FlipbookFileUtility に統合
+- 未使用のデッドコード（TryAttachModularAvatar）を削除
+- GUIStyle の毎フレーム生成を static キャッシュに変更
+- プリセット（おすすめ / カスタム）を常時表示に変更し、Prefab 生成・自動分割もプリセット対象に追加
+- FPS 計算機を折りたたみ化（デフォルト閉）
+- Dry Run / Generate ダイアログの容量見積もりを RGBA32 から DXT5 表示に変更
+
+### Added
+
+- 実行セクションに推定テクスチャメモリー増加量をリアルタイム表示（PC/DXT5）
+- Texture2DArray / LilToon モードに最大秒数ガイドを表示
+
 ## [1.0.0] - 2026-04-04
 
 ### Added

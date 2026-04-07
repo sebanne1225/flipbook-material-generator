@@ -9,7 +9,7 @@
 - 表示名: `Flipbook Material Generator`
 - Runtime asmdef: `Sebanne.FlipbookMaterialGenerator`
 - Editor asmdef: `Sebanne.FlipbookMaterialGenerator.Editor`
-- 現在 version: `1.0.0`
+- 現在 version: `1.1.0`
 
 ## 公開メタ情報
 
