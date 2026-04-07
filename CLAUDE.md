@@ -9,6 +9,7 @@
 version 1.0.0 公開完了（GitHub Release / VPM listing / VCC / BOOTH）。
 
 version 1.1.0 リリース完了（GitHub Release / VPM listing / BOOTH）。
+HTML 使い方ガイド完成（Documentation~/notes/guide-source/flipbook-guide.html、11章・スクショ22枚・Base64埋め込み1ファイル完結）。
 
 ### 入力
 - VideoFile モード: Assets 内動画ファイルを ObjectField で選択、ffprobe で参考情報表示、FFmpeg で PNG 抽出・音声抽出・トリミング対応（-ss/-t）
@@ -172,4 +173,5 @@ version 1.1.0 リリース完了（GitHub Release / VPM listing / BOOTH）。
 - Video 入力 + 非 MPS モードで ExtractFrames がフレーム上限を超えるケース（UI ガードで事実上ブロック、コードレベルのキャップなし）
 - NDMF ビルドレポートにテクスチャメモリー増加量表示
 - LilToon Generate ダイアログの Sheet サイズ表示ハードコード（sheetResult.Columns * 256 — frameSize 縮小時に不正確）
-- BOOTH 同梱 PDF 使い方ガイド（全機能紹介ドキュメント）
+- 画像への注釈追加（赤枠・テキスト。対象画像のリストアップから）
+- BOOTH_PACKAGE への HTML ガイド同梱（zip 再作成）
