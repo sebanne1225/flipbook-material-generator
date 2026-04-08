@@ -9,7 +9,7 @@
 version 1.0.0 公開完了（GitHub Release / VPM listing / VCC / BOOTH）。
 
 version 1.1.0 リリース完了（GitHub Release / VPM listing / BOOTH）。
-HTML 使い方ガイド完成（Documentation~/notes/guide-source/flipbook-guide.html、11章・スクショ22枚・Base64埋め込み1ファイル完結）。
+HTML 使い方ガイド v1.1 完成（注釈入り画像24枚・章並べ替え済み・BOOTH_PACKAGE 同梱済み）。
 
 ### 入力
 - VideoFile モード: Assets 内動画ファイルを ObjectField で選択、ffprobe で参考情報表示、FFmpeg で PNG 抽出・音声抽出・トリミング対応（-ss/-t）
