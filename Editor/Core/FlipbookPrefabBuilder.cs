@@ -17,12 +17,35 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
             "nadena.dev.modular_avatar.core.ModularAvatarMergeAnimator";
         private const string MAMenuItemTypeName =
             "nadena.dev.modular_avatar.core.ModularAvatarMenuItem";
+        private const string VRCSpatialAudioSourceTypeName =
+            "VRC.SDK3.Avatars.Components.VRCSpatialAudioSource";
 
         private static Type FindType(string fullName)
         {
             return AppDomain.CurrentDomain.GetAssemblies()
                 .Select(a => a.GetType(fullName))
                 .FirstOrDefault(t => t != null);
+        }
+
+        // 音声設定の共通規定（TD-T47・SoudSettingSample 準拠）。VRC SDK は任意依存のためリフレクションで付与。
+        private static void ApplyStandardAudioSettings(GameObject audioObj, AudioSource source)
+        {
+            source.volume = 0.2f;
+            source.spatialBlend = 0f;
+            source.spatialize = true;
+            source.rolloffMode = AudioRolloffMode.Logarithmic;
+            source.minDistance = 5f;
+            source.maxDistance = 5f;
+
+            var vrcType = FindType(VRCSpatialAudioSourceTypeName);
+            if (vrcType == null)
+                return;
+            var vrcAudio = audioObj.AddComponent(vrcType);
+            var flags = BindingFlags.Public | BindingFlags.Instance;
+            vrcType.GetField("Gain", flags)?.SetValue(vrcAudio, 1f);
+            vrcType.GetField("Near", flags)?.SetValue(vrcAudio, 5f);
+            vrcType.GetField("Far", flags)?.SetValue(vrcAudio, 5f);
+            vrcType.GetField("EnableSpatialization", flags)?.SetValue(vrcAudio, true);
         }
 
         internal static string Build(Material material, string outputFolderPath, string baseName,
@@ -60,6 +83,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                     source.clip = audioClip;
                     source.playOnAwake = true;
                     source.loop = true;
+                    ApplyStandardAudioSettings(audioObj, source);
                     audioObj.SetActive(false);
                 }
 
@@ -137,6 +161,7 @@ namespace Sebanne.FlipbookMaterialGenerator.Editor
                     source.clip = audioClip;
                     source.playOnAwake = true;
                     source.loop = true;
+                    ApplyStandardAudioSettings(audioObj, source);
                     audioObj.SetActive(false);
                 }
 
