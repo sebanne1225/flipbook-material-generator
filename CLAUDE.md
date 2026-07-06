@@ -175,4 +175,4 @@ HTML 使い方ガイド v1.1 完成（注釈入り画像・章並べ替え済み
 
 ## 次フェーズ候補
 
-Notion 次フェーズ候補 DB（リポ=Flipbook Material Generator）を参照。
+knowledge-base `next-phase/tool-dev.md`「Flipbook」節（後回しの正本）を参照。旧 Notion 次フェーズ候補 DB は凍結。
