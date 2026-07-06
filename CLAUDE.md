@@ -4,76 +4,9 @@
 
 ## Current State
 
-3モード（Texture2DArray / LilToon / MultiPageSequence）× 2入力モード（VideoFile / PngSequence）が動作する状態。SpriteSheet モードは除外済み。
+3モード（Texture2DArray / LilToon / MultiPageSequence）× 2入力モード（VideoFile / PngSequence）が動作。SpriteSheet モードは除外済み。version 1.1.0 まで公開完了（GitHub Release / VPM listing / BOOTH、HTML 使い方ガイド v1.1 同梱）。
 
-version 1.0.0 公開完了（GitHub Release / VPM listing / VCC / BOOTH）。
-
-version 1.1.0 リリース完了（GitHub Release / VPM listing / BOOTH）。
-HTML 使い方ガイド v1.1 完成（注釈入り画像・章並べ替え済み・BOOTH_PACKAGE 同梱済み）。
-
-### 入力
-- VideoFile モード: Assets 内動画ファイルを ObjectField で選択、ffprobe で参考情報表示、FFmpeg で PNG 抽出・音声抽出・トリミング対応（-ss/-t）
-- FFmpeg PNG 抽出キャッシュ: %TEMP%/FlipbookFrames/{hash}/ にキャッシュ。動画パス+FPS+トリム+解像度+最終更新日時の MD5 ハッシュ。一致すれば抽出スキップ
-- 音声抽出キャッシュ: audio_cache_key.txt でキャッシュキー照合（動画パス+トリム設定+最終更新日時）。一致すれば FFmpeg スキップ
-- PngSequence モード: PNG 連番フォルダ指定
-
-### 出力管理
-- スロット方式フォルダ構成（Generated_Flipbook/{番号}_{出力名}/）
-- 出力先3モード（SourceRelative / ToolDefault / Custom）
-- スロットブラウザ UI（概要表示・フォルダを開く・名前クリックで選択・削除機能付き）
-- 同一スロットのモード変更時に旧生成物を全削除（Audio/ フォルダは保護）
-- Texture2DArray / LilToon モードはフレーム上限ガードあり（maxSheetSize から逆算、超過時 Generate ブロック）
-
-### Prefab 生成・MA 連携
-- Prefab 生成対応（FlipbookPrefabBuilder）
-- MA optional 対応（リフレクション方式）
-- MultiPageSequence: MergeAnimator / ObjectToggle / Menu の 3 bool 制御
-- 3モード: ObjectToggle / Menu の 2 bool 制御
-- MA Menu 構造: MenuInstaller + SubMenu MenuItem → Toggle 子オブジェクト（3モード）/ Toggle + Loop + Reset 子オブジェクト（MultiPageSequence）
-- AudioSource 対応（Audio/ 子オブジェクト）。3モード: ObjectToggle 連動 / MultiPageSequence: Animation layer で m_IsActive 制御
-- 子オブジェクト並び順: MA Menu(0) → Audio(1) → Quad/Pages(2)
-
-### MultiPageSequence 固有
-- PNG 連番を複数スプライトシートに自動分割
-- AnimatorController でシームレスループ再生
-- Idle ステート（全ページ OFF）をデフォルトステートとして追加
-- AnimationClip は writeDefaultValues 非依存設計（自分 ON・他全ページ OFF・Audio m_IsActive 明示制御）
-- FlipbookEnabled（Bool）/ FlipbookLoop（Bool, default=true）/ FlipbookReset（Bool）の 3 パラメータ常時生成
-- ResetPage1 ステート: Audio m_IsActive OFF→ON で再生位置リセット、再生後 Page2 へ遷移
-- AnimatorController レイヤー名: "Flipbook"
-
-### UI
-- 5セクション構成（入力設定・出力設定・Prefab/MA設定・実行・上級設定）、helpBox 枠で Skinned Mesh Mirror 式ブロック分け
-- セクション見出しは DrawSectionHeader（boldLabel + miniLabel 補助文）
-- DrawSubInfo ヘルパーで情報表示用 miniLabel を共通化
-- FPS・トリミングは入力設定セクション内、FPS 計算機は Foldout 化（デフォルト閉、SerializeField で domain reload 対応）、MPS 分割プレビューはフレーム推定の直後
-- 出力モード Popup 直下に Info HelpBox でモード説明（再生方式・重さ・用途・制約）。Texture2DArray / LilToon はモード説明直後に秒数ガイド DrawSubInfo（最大フレーム数 ≈ 秒数）
-- 出力先パスは Skinned Mesh Mirror 式（「現在の出力先」ラベル + 完全パス + 補助文）
-- スロット一覧はスロット選択の直下（Foldout）
-- 入力不足案内は Dry Run / Generate ボタンの上
-- 上級設定は最下部 Foldout
-- OnGUI 全体を ScrollView で囲む
-- HelpBox は警告・エラー専用。説明・情報表示は DrawSubInfo（miniLabel）
-- ラベルはツール概念語を日本語化済み（出力モード、入力フォルダ、出力フォルダ、PNG連番 FPS）
-- コンポーネント固有名（MA, Prefab, AudioClip 等）は英語のまま
-- プリセット Toolbar は常時表示（_generatePrefab の上）。ApplyPreset は _generatePrefab=true、MPS 時 _autoSplit=true を含む。プリセット説明 DrawSubInfo 付き
-- FPS 補助計算 UI（分秒入力・入力フォルダから自動カウント）。Foldout 内、デフォルト閉
-- 容量見積もり: 実行セクション内に推定テクスチャメモリー増加 (DXT5) を DrawSubInfo 表示。EstimateTextureBytes() に計算一本化。OnGUI / DryRun ダイアログ / Generate ダイアログ全箇所で統一
-- domain reload 対応済み（SerializeField + _videoInfo re-probe）
-- enableMenu=false 時は MA Menu を生成せず ObjectToggle を root に直接アタッチ
-
-### アセット上書き
-- 削除は全箇所 FlipbookFileUtility 経由（File.Delete + .meta 削除、ゴミ箱を経由しない完全削除）
-- Material: CopyPropertiesFromMaterial で GUID 保持
-- Texture2DArray / AnimationClip: 完全削除 → Refresh → CreateAsset
-- AnimatorController: 完全削除 → Refresh → CreateAnimatorControllerAtPath
-- PNG: File.WriteAllBytes（.meta 保持で GUID 不変）
-
-### その他
-- ミップストリーミング常時 ON（TextureImporter.streamingMipmaps = true）
-- FrameLoader: 読み込み失敗スキップ続行（Warn ログ）
-- FlipbookConstants.cs でパス文字列・オブジェクト名・Animator パラメータ名・シェーダープロパティ名を定数化
-- MA enum は Enum.Parse + try-catch（数値直書き禁止）
+機能の全量仕様は正本を各所へ委譲 — ユーザー面（入力・出力管理・Prefab/MA・UI・上級設定）は `Documentation~/notes/guide-source/`、非自明な設計判断は `Documentation~/notes/technical/` + 本ファイル下部「技術知見（flipbook 固有）」節、各ファイルの役割は下部「ファイル構成」節、実挙動はコード直読が正本。後回しは knowledge-base `next-phase/tool-dev.md`「Flipbook」節。
 
 ## 技術知見（flipbook 固有）
 
@@ -163,15 +96,7 @@ HTML 使い方ガイド v1.1 完成（注釈入り画像・章並べ替え済み
 
 - 非破壊を最優先にし、既存データや既存設定を直接書き換える前に確認手段を用意する。
 - Dry Run優先で、まずは変更予定の内容を確認できる導線を用意する。
-- まず短い plan を出してから作業する。
-- commit / push は明示的な指示があるまで行わない。
 - Editor-only ファイルの namespace は `Sebanne.FlipbookMaterialGenerator.Editor` に統一する。
-
-### コード変更の原則
-- 変更した全ての行が、依頼内容に直接たどれること（判定基準）
-- 元からあった死にコードはこのプロジェクトでは報告だけして消さない
-- 依頼を成立させるための連鎖変更（Component→Editor→Plugin 等）は「直接関係する」に含む
-- 事前に plan で承認されたリファクタ・構造変更はこの原則の対象外
 
 ## 次フェーズ候補
 
